@@ -1,0 +1,3 @@
+clarity_sample_id,id,assay,sex,diagnosis,phenotype,grouped,type,clarity_pool_id,platform,read1,read2,ref
+ALL204A61,8775-15,exome,F,pedriatrics,unaffected,666,mother,24-15963,illumina,/trannel/proj/cmd-pipe/test-files/8775_4genes_1.fastq.gz,/trannel/proj/cmd-pipe/test-files/8775_4genes_2.fastq.gz,hg19
+ALL204A60,8776-15,exome,M,pedriatrics,affected,666,proband,24-15963,illumina,/trannel/proj/cmd-pipe/test-files/8776_4genes_1.fastq.gz,/trannel/proj/cmd-pipe/test-files/8776_4genes_2.fastq.gz,hg19
