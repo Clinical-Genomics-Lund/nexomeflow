@@ -5,7 +5,7 @@ params.bed = "/data/bnf/ref/agilent_clinical_research_exome_v2/S30409818_Regions
 
 OUTDIR = file(params.outdir)
 
-
+// might move these to config
 genome_file = file(params.fasta)
 regions_bed = file(params.bed)
 
@@ -24,7 +24,7 @@ Channel
 
 
 
-
+// alignment using sentieon-bwa
 process bwa_align {
     cpus 20
     // publishDir '/trannel/proj/cmd-pipe/test-files/bam', mode: 'copy', overwrite: 'false'
@@ -44,6 +44,7 @@ process bwa_align {
 
 }
 
+// mark duplicates, will switch to sentieon
 process markdup {
     cpus 10
     input:
@@ -60,12 +61,13 @@ process markdup {
 
 }
 
+// split output channels, one for qc one for variantcalling
 bam_markdup.into {
     bam_marked1
     bam_marked2
 }
 
-
+// post alignement qc
 process post_align_qc {
     cpus 6
 
@@ -84,6 +86,7 @@ process post_align_qc {
 
 }
 
+// upload qc to CDM if upload flag is in use
 process upload {
     publishDir "${OUTDIR}/postmap/exome", mode: 'copy', overwrite: 'false'
     input:
@@ -99,11 +102,6 @@ process upload {
     echo "YO" > ${id}.qc.upload
     """
     
-
-
-
-
-
     // /data/bnf/scripts/register_sample.pl --run-folder /data/NextSeq1/190418_NB501697_0126_AH5FC2BDXX --sample-id 6417-18 --assay exome --qc /data/bnf/postmap/exome/6417-18.bwa.QC
 }
 
@@ -127,7 +125,7 @@ process gvcf_template {
 
 }
 
-
+// skapa en pedfil, ändra input istället för sök ersätt?
 process create_ped {
     input:
     set group, id, sex, mother, father, phenotype from ped
@@ -161,18 +159,32 @@ process create_ped {
 
 ped_ch
     .collectFile(storeDir: "${OUTDIR}/ped/exome")
-    .set{ madeleine }
+    .set{ lines }
     
 
-process mock {
+// madeleine ped om familj
+process madeleine_ped {
     publishDir "${OUTDIR}/ped/exome", mode: 'copy' , overwrite: 'true'
     input:
-    file(ped) from madeleine
+    file(ped) from lines
 
     output:
-    file("hej")    
+    file("hej")
+
     script:
+    // funktion som räknar antalet individer i ped
+    def bla = file("${OUTDIR}" + "/ped/exome/" + ped)
+    no_lines =  bla.countLines()
+    if (no_lines >= 2) {
+
     """
-    cat ${ped} > hej
+    echo "FAMILJ" > hej
     """
+    }
+    else {
+    """
+    echo "singel" > hej
+    """
+    }
+
 }
