@@ -127,25 +127,52 @@ process gvcf_template {
 
 }
 
-//ped.groupTuple().transpose().subscribe{ println it }
 
 process create_ped {
-
-   // publishDir "${OUTDIR}/ped/exome", mode: 'copy' , overwrite: 'true'
-
     input:
     set group, id, sex, mother, father, phenotype from ped
-    
 
     output:
     file("${group}.ped") into ped_ch
 
     script:
+    if ( sex =~ /F/) {
+        sex = "2"
+    }
+    else {
+        sex = "1"
+    }
+    if ( phenotype =~ /affected/ ) {
+        phenotype = "2"
+    }
+    else {
+        phenotype = "1"
+    }
+    if ( father == "" ) {
+        father = "0"
+    }
+    if ( mother == "" ) {
+        mother = "0"
+    }
     """
-    echo "${group} ${id} ${sex} ${mother} ${father} ${phenotype}" > ${group}.ped
+    echo "${group}\t${id}\t${father}\t${mother}\t${sex}\t${phenotype}" > ${group}.ped
     """
 }
 
 ped_ch
     .collectFile(storeDir: "${OUTDIR}/ped/exome")
+    .set{ madeleine }
     
+
+process mock {
+    publishDir "${OUTDIR}/ped/exome", mode: 'copy' , overwrite: 'true'
+    input:
+    file(ped) from madeleine
+
+    output:
+    file("hej")    
+    script:
+    """
+    cat ${ped} > hej
+    """
+}
