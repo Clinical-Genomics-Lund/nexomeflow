@@ -2,7 +2,8 @@
 
 params.fasta = "/data/bnf/ref/b37/human_g1k_v37_decoy.fasta"
 params.bed = "/data/bnf/ref/agilent_clinical_research_exome_v2/S30409818_Regions.nochr.bed"
-index = file(params.csv)
+
+OUTDIR = file(params.outdir)
 
 
 genome_file = file(params.fasta)
@@ -12,8 +13,16 @@ regions_bed = file(params.bed)
 Channel
     .fromPath(params.csv)
     .splitCsv(header:true)
-    .map{ row-> tuple(row.group, row.id, file(row.read1), file(row.read2)) }
+//    .map{ row-> tuple(row.group, row.id, file(row.read1), file(row.read2)) }
     .set { fastq }
+
+Channel
+    .fromPath(params.csv)
+    .splitCsv(header:true)
+    .map{ row-> tuple(row.group, row.id, row.sex, row.mother, row.father, row.phenotype) }
+    .set { ped }
+
+
 
 
 process bwa_align {
@@ -21,7 +30,8 @@ process bwa_align {
     // publishDir '/trannel/proj/cmd-pipe/test-files/bam', mode: 'copy', overwrite: 'false'
 
     input: 
-	set group, id, file(read1), file(read2) from fastq
+	//set group, id, file(read1), file(read2) from fastq
+    set clarity_sample_id, id, assay, sex, diagnosis, phenotype, group, father, mother, clarity_pool_id, platform, file(read1), file(read2), analysis_dir from fastq
 
     output:
     set group, id, file("${id}_bwa.sort.bam") into bwa_bam
@@ -51,8 +61,8 @@ process markdup {
 }
 
 bam_markdup.into {
-    bam_qc
-    bam_marked
+    bam_marked1
+    bam_marked2
 }
 
 
@@ -60,9 +70,9 @@ process post_align_qc {
     cpus 6
 
     input:
-    set group, id, file(markdup_bam) from bam_qc
+    set group, id, file(markdup_bam) from bam_marked1
     output:
-    set id, file("${id}.bwa.qc")
+    set id, file("${id}.bwa.qc") into bam_qc
 
 
     script:
@@ -74,23 +84,68 @@ process post_align_qc {
 
 }
 
+process upload {
+    publishDir "${OUTDIR}/postmap/exome", mode: 'copy', overwrite: 'false'
+    input:
+    set id, file(qc) from bam_qc
+
+    output:
+    set id, file("${id}.qc.upload")
+    when:
+    params.upload =~ /true/
+
+    script:
+    """
+    echo "YO" > ${id}.qc.upload
+    """
+    
+
+
+
+
+
+    // /data/bnf/scripts/register_sample.pl --run-folder /data/NextSeq1/190418_NB501697_0126_AH5FC2BDXX --sample-id 6417-18 --assay exome --qc /data/bnf/postmap/exome/6417-18.bwa.QC
+}
 
 
 process gvcf_template {
     cpus 1
 
-    publishDir '/trannel/proj/cmd-pipe/test-files', mode: 'copy', overwrite: 'true'
+    publishDir "${OUTDIR}/tmp/exome/", mode: 'copy', overwrite: 'true'
     input:
-    set group, id, file(bam) from bam_marked.groupTuple()
-
+    set group, id, file(bam) from bam_marked2.groupTuple()
+    
     output:
     file("${group}.concat.count") into results
 
     script:
     """
-    echo "${bam}" >> ${group}.concat.count
+    echo "${bam}" > ${group}.concat.count
     """
 
 
 
 }
+
+//ped.groupTuple().transpose().subscribe{ println it }
+
+process create_ped {
+
+   // publishDir "${OUTDIR}/ped/exome", mode: 'copy' , overwrite: 'true'
+
+    input:
+    set group, id, sex, mother, father, phenotype from ped
+    
+
+    output:
+    file("${group}.ped") into ped_ch
+
+    script:
+    """
+    echo "${group} ${id} ${sex} ${mother} ${father} ${phenotype}" > ${group}.ped
+    """
+}
+
+ped_ch
+    .collectFile(storeDir: "${OUTDIR}/ped/exome")
+    
