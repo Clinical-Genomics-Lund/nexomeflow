@@ -34,7 +34,7 @@ process bwa_align {
     set clarity_sample_id, id, assay, sex, diagnosis, phenotype, group, father, mother, clarity_pool_id, platform, file(read1), file(read2), analysis_dir from fastq
 
     output:
-    set group, id, file("${id}_bwa.sort.bam") into bwa_bam
+    set group, id, analysis_dir, file("${id}_bwa.sort.bam") into bwa_bam
 
     script:
 	"""
@@ -48,10 +48,10 @@ process bwa_align {
 process markdup {
     cpus 10
     input:
-	set group, id, file(sorted_bam) from bwa_bam
+	set group, id, analysis_dir, file(sorted_bam) from bwa_bam
 
     output:
-	set group, val(id), file("${id}.markdup.bam") into bam_markdup
+	set group, val(id), analysis_dir, file("${id}.markdup.bam") into bam_markdup
     
     script:
     """
@@ -72,14 +72,14 @@ process post_align_qc {
     cpus 6
 
     input:
-    set group, id, file(markdup_bam) from bam_marked1
+    set group, id, analysis_dir, file(markdup_bam) from bam_marked1
     output:
-    set id, file("${id}.bwa.qc") into bam_qc
+    set id, analysis_dir, file("${id}.bwa.qc") into bam_qc
 
 
     script:
     """
-    echo "QC DONE" > ${id}.bwa.qc
+    echo "${analysis_dir}" > ${id}.bwa.qc
     """
   //  /data/bnf/scripts/postaln_qc.pl $markdup_bam $regions_bed ${id} ${task.cpus} $regions_bed $genome_file > ${id}.bwa.qc
 
@@ -88,9 +88,9 @@ process post_align_qc {
 
 // upload qc to CDM if upload flag is in use
 process upload {
-    publishDir "${OUTDIR}/postmap/exome", mode: 'copy', overwrite: 'false'
+    publishDir "${OUTDIR}/postmap/exome", mode: 'copy', overwrite: 'true'
     input:
-    set id, file(qc) from bam_qc
+    set id, analysis_dir, file(qc) from bam_qc
 
     output:
     set id, file("${id}.qc.upload")
@@ -99,26 +99,27 @@ process upload {
 
     script:
     """
-    echo "YO" > ${id}.qc.upload
+    echo "${analysis_dir} ${qc}" > ${id}.qc.upload
     """
     
-    // /data/bnf/scripts/register_sample.pl --run-folder /data/NextSeq1/190418_NB501697_0126_AH5FC2BDXX --sample-id 6417-18 --assay exome --qc /data/bnf/postmap/exome/6417-18.bwa.QC
+    // /data/bnf/scripts/register_sample.pl --run-folder ${analysis_dir} --sample-id ${id} --assay exome --qc ${qc}
 }
 
 
-process gvcf_template {
+process gvcf_combine {
     cpus 1
 
     publishDir "${OUTDIR}/tmp/exome/", mode: 'copy', overwrite: 'true'
     input:
-    set group, id, file(bam) from bam_marked2.groupTuple()
+    set group, id, analysis_dir, file(bam) from bam_marked2.groupTuple()
     
     output:
     file("${group}.concat.count") into results
 
     script:
+    gvcfs = bam.collect{"$it"}.join(' --variant ')
     """
-    echo "${bam}" > ${group}.concat.count
+    echo "${gvcfs}" > ${group}.concat.count
     """
 
 
