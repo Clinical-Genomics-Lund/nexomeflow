@@ -1,44 +1,5 @@
-   [ 
-     {
-        "clarity_sample_id" : "ALL204A61",
-        "id" : "325-15",
-        "assay" : "exome",
-        "sex" : "F",
-        "diagnosis" : "pediatrics",
-        "phenotype" : "unaffected",
-        "grouped" : {
-           "type" : "mother",
-           "group_id" : "324-15"
-        },
-        "clarity_pool_id" : "24-15963",
-        "platform" : "illumina",
-        "reads" : [
-           {
-              "rev" : "/trannel/proj/cmd-pipe/test-files/8775_4genes_2.fastq.gz",
-              "fwd" : "/trannel/proj/cmd-pipe/test-files/8775_4genes_1.fastq.gz"
-           }
-        ],
-        "ref" : "hg19"
-     },
-     {
-        "sex" : "M",
-        "diagnosis" : "pediatrics",
-        "phenotype" : "affected",
-        "grouped" : {
-           "type" : "proband",
-           "group_id" : "324-15"
-        },
-        "clarity_sample_id" : "ALL204A60",
-        "id" : "324-15",
-        "assay" : "exome",
-        "clarity_pool_id" : "24-15963",
-        "platform" : "illumina",
-        "reads" : [
-           {
-              "fwd" : "/trannel/proj/cmd-pipe/test-files/8776_4genes_1.fastq.gz",
-              "rev" : "/trannel/proj/cmd-pipe/test-files/8776_4genes_2.fastq.gz"
-           }
-        ],
-        "ref" : "hg19"
-     }
-    ]
+{
+   "vep": "/data/bnf/sw/ensembl-vep-95/vep",
+   "gatk41":"/data/bnf/sw/gatk/4.1.0.0/gatk --java-options '-Xmx12G'",
+   "sent": "/data/bnf/sw/sentieon/sentieon-genomics-201808.01/bin/sentieon"   
+}

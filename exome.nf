@@ -10,6 +10,35 @@ genome_file = file(params.fasta)
 regions_bed = file(params.bed)
 
 
+
+
+// SOFTWARE-BIN
+VCFMULTI = "/data/bnf/sw/vcflib/bin/vcfbreakmulti"
+BCFTOOLS = "/data/bnf/sw/bcftools-1.3.1/bcftools"
+
+// VEP 
+VEP = "/data/bnf/sw/ensembl-vep-95/vep"
+    FIX_VEP = "/data/bnf/scripts/fix_empty_vep_vcf.pl"
+    CADD = "/data/bnf/sw/.vep/PluginData/whole_genome_SNVs_1.4.tsv.gz"
+    VEP_FASTA = "/data/bnf/sw/.vep/homo_sapiens/87_GRCh37/Homo_sapiens.GRCh37.75.dna.primary_assembly.fa"
+    MAXENTSCAN = "/data/bnf/sw/ensembl-vep-95/.vep/Plugins/MaxEntScan_scripts"
+    VEP_CACHE = "/data/bnf/sw/ensembl-vep-95/.vep"
+    GNOMAD = "/data/bnf/ref/b37/gnomad.exomes.r2.0.1.sites.vcf___.gz,gnomADg,vcf,exact,0,AF,AF_AFR,AF_AMR,AF_ASJ,AF_EAS,AF_FIN,AF_NFE,AF_OTH"
+    GERP = "/data/bnf/ref/annotations_dbs/VEP_conservation/All_hg19_RS.bw,GERP,bigwig"
+    PHYLOP =  "/data/bnf/ref/annotations_dbs/VEP_conservation/hg19.100way.phyloP100way.bw,phyloP100way,bigwig"
+    PHASTCONS = "/data/bnf/ref/annotations_dbs/VEP_conservation/hg19.100way.phastCons.bw,phastCons,bigwig"
+SNPSIFT = "java -jar /data/bnf/sw/snpEff/4.3/SnpSift.jar"
+    CLINVAR = "/data/bnf/ref/annotations_dbs/clinvar_20190225.vcf.gz"
+
+
+
+
+
+
+
+
+
+
 Channel
     .fromPath(params.csv)
     .splitCsv(header:true)
@@ -105,24 +134,68 @@ process upload {
     // /data/bnf/scripts/register_sample.pl --run-folder ${analysis_dir} --sample-id ${id} --assay exome --qc ${qc}
 }
 
+process DNAscope {
+    cpus 6
+    publishDir "${OUTDIR}/tmp/exome/", mode: 'copy', overwrite: 'true'
+    input:
+    set group, id, analysis_dir, file(bam) from bam_marked2
+    output:
+    set group, id, file("${id}.${group}.gvcf") into gvcf
+    script:
+    """
+    echo "${id} hej hej hej" > ${id}.${group}.gvcf
+    """
+// --emit_mode GVCF
+}
+
+
 
 process gvcf_combine {
-    cpus 1
+    cpus 6
 
     publishDir "${OUTDIR}/tmp/exome/", mode: 'copy', overwrite: 'true'
     input:
-    set group, id, analysis_dir, file(bam) from bam_marked2.groupTuple()
-    
+    set group, id, file(bam) from gvcf.groupTuple()
+
     output:
-    file("${group}.concat.count") into results
+    set group, file("${group}.concat.count") into g_gvcf
 
     script:
-    gvcfs = bam.collect{"$it"}.join(' --variant ')
+    // Om fler än en vcf, GVCF combine annars döp om och skickade vidare
+    // lägg till lista för alla outcomes, ensam vcf/multiple vcf
+    bam = bam + [1]
+    // antal element
+    bam_l =  bam.size()
+    // om 3 eller fler == multivcf
+    if (bam_l >= 3) {
+        bam = bam - [1]
+        ggvcfs = bam.join(' --variant ')
     """
-    echo "${gvcfs}" > ${group}.concat.count
+    echo "${ggvcfs}" > ${group}.concat.count
     """
+    }
+    // annars ensam vcf, skicka vidare
+    else {
+    bam = bam - [1]
+    ggvcf = bam.join('')
+    """
+    mv ${ggvcf} ${group}.concat.count
+    """
+    }
 
+}
 
+process gvcf_genotype {
+    cpus 6
+    publishDir "${OUTDIR}/tmp/exome/", mode: 'copy', overwrite: 'true'
+
+    input:
+    set group, file(vcf) from g_gvcf
+    output:
+    set group, file("${group}.vcf") into split
+    """
+    echo "FINAL" > ${group}.vcf
+    """
 
 }
 
@@ -157,7 +230,7 @@ process create_ped {
     echo "${group}\t${id}\t${father}\t${mother}\t${sex}\t${phenotype}" > ${group}.ped
     """
 }
-
+// collects each individual's ped-line and creates on ped-file
 ped_ch
     .collectFile(storeDir: "${OUTDIR}/ped/exome")
     .set{ lines }
@@ -189,3 +262,112 @@ process madeleine_ped {
     }
 
 }
+
+
+// # Splitting & normalizing variants: 6427-13
+
+process split_normalize {
+    
+    input:
+    set group, file(vcf) from split
+    output:
+    set group, file("${group}.norm.DPAF.vcf") into vep
+
+
+    """
+    echo "$VCFMULTI ${vcf}" > ${group}.multibreak.vcf
+    echo "$BCFTOOLS norm -m-both -c w -O v -f $genome_file -o ${group}.norm.vcf ${group}.multibreak.vcf" > ${group}.norm.vcf
+    echo "/data/bnf/scripts/exome_DPAF_filter.pl ${group}.norm.vcf" > ${group}.norm.DPAF.vcf
+    """
+}
+
+// # Annotating variants with VEP: 6427-13
+
+process annotate_vep {
+    publishDir "${OUTDIR}/tmp/exome", mode: 'copy' , overwrite: 'true'
+    input:
+    set group, file(vcf) from vep
+
+    output:
+    set group, file("${group}.vep.vcf") into snpsift
+    
+    """
+    echo \\
+    "$VEP \\
+    -i ${vcf} \\
+    -o ${group}.vep.vcf \\
+    --offline \\
+    --merged \\
+    --plugin CADD $CADD \\
+    --plugin LoFtool \\
+    --plugin MaxEntScan,$MAXENTSCAN,SWA,NCSS \\
+    --fasta $VEP_FASTA \\
+    --dir_cache $VEP_CACHE \\
+    --dir_plugins $VEP_CACHE/Plugins \\
+    --distance 200 \\
+    -cache \\
+    -custom $GNOMAD \\
+    -custom $GERP \\
+    -custom $PHYLOP \\
+    -custom $PHASTCONS \\
+    " > ${group}.vep.vcf
+    echo "$FIX_VEP $vcf ${group}.vep.vcf" > ${group}.vep.vcf
+    """
+
+}
+// # Annotating variants with SnpSift 2: 6427-13
+
+process snp_sift {
+
+    input:
+    set group, file(vcf) from snpsift
+    output:
+    set group, file("${group}.clinvar.vep") into clinmod
+    """
+    echo "$SNPSIFT annotate $CLINVAR -info CLNSIG,CLNACC,CLNREVSTAT $vcf" > ${group}.clinvar.vep
+    """
+
+}
+
+// # Modifying CLNSIG field to allow it to be used by genmod score properly: 6427-13
+
+// # Adding SweGen allele frequencies: 6427-13
+
+// # Annotating variants with Genmod: 6427-13
+
+// # Marking splice INDELs: 6427-13
+
+// # Annotating delins with cadd: 6427-13
+
+// # Annotating variant inheritance models: 6427-13
+
+// # Extracting most severe consequence: 6427-13
+
+// # Modifying annotations by VEP-plugins, and adding to info-field: 6427-13
+
+// # Adding loqusdb allele frequency to info-field: 6427-13
+
+// # Scoring variants: 6427-13
+
+// # Adjusting compound scores: 6427-13
+
+// # Sorting VCF according to score: 6427-13
+
+// # Bgzipping and indexing VCF: 6427-13
+
+// # Renaming VCF: 6427-13
+
+// # Indexing VCF: 6427-13
+
+// # Creating madeline pedigree: 6427-13
+
+// # Running PEDDY: 6427-13
+
+// # Running gSNP: 6427-13
+
+// # Uploading case to scout: 6427-13
+
+// # Registering contamination data: 6427-13
+
+// # Uploading variants to loqusdb: 6427-13
+
