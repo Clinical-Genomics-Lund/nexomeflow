@@ -27,12 +27,16 @@ VEP = "/data/bnf/sw/ensembl-vep-95/vep"
     GERP = "/data/bnf/ref/annotations_dbs/VEP_conservation/All_hg19_RS.bw,GERP,bigwig"
     PHYLOP =  "/data/bnf/ref/annotations_dbs/VEP_conservation/hg19.100way.phyloP100way.bw,phyloP100way,bigwig"
     PHASTCONS = "/data/bnf/ref/annotations_dbs/VEP_conservation/hg19.100way.phastCons.bw,phastCons,bigwig"
+// SNPSIFT
 SNPSIFT = "java -jar /data/bnf/sw/snpEff/4.3/SnpSift.jar"
     CLINVAR = "/data/bnf/ref/annotations_dbs/clinvar_20190225.vcf.gz"
-
-
-
-
+    CLINMOD = "/data/bnf/scripts/modify_CLNSIG_NEW.pl"
+    SWEGEN = "/data/bnf/ref/annotations_dbs/swegen_20170823/anon-SweGen_STR_NSPHS_1000samples_freq_hg19.vcf.gz"
+// GENMOD
+GENMOD = "/home/bjorn/miniconda2/bin/genmod"
+    SPIDEX = "/data/bnf/ref/annotations_dbs/hg19_spidex.tsv.gz"
+    MARKSPLICE = "/data/bnf/scripts//mark_spliceindels.pl"
+    ADDCADD = "/data/bnf/scripts/add_missing_CADDs_1.4.sh"
 
 
 
@@ -264,7 +268,7 @@ process madeleine_ped {
 }
 
 
-// # Splitting & normalizing variants: 6427-13
+// Splitting & normalizing variants:
 
 process split_normalize {
     
@@ -281,10 +285,10 @@ process split_normalize {
     """
 }
 
-// # Annotating variants with VEP: 6427-13
+// # Annotating variants with VEP: 
 
 process annotate_vep {
-    publishDir "${OUTDIR}/tmp/exome", mode: 'copy' , overwrite: 'true'
+    
     input:
     set group, file(vcf) from vep
 
@@ -315,59 +319,92 @@ process annotate_vep {
     """
 
 }
-// # Annotating variants with SnpSift 2: 6427-13
+// # Annotating variants with SnpSift 2
 
 process snp_sift {
 
     input:
     set group, file(vcf) from snpsift
     output:
-    set group, file("${group}.clinvar.vep") into clinmod
+    set group, file("${group}.clinvar.vcf") into clinmod
     """
-    echo "$SNPSIFT annotate $CLINVAR -info CLNSIG,CLNACC,CLNREVSTAT $vcf" > ${group}.clinvar.vep
+    echo "$SNPSIFT annotate $CLINVAR -info CLNSIG,CLNACC,CLNREVSTAT $vcf" > ${group}.clinvar.vcf
     """
 
 }
 
-// # Modifying CLNSIG field to allow it to be used by genmod score properly: 6427-13
+// # Modifying CLNSIG field to allow it to be used by genmod score properly:
+process clinsigmod {
+    input:
+    set group, file(vcf) from clinmod
+    output:
+    set group, file("${group}.clinmod.vcf") into sweall
+    """
+    echo "$CLINMOD $vcf" > ${group}.clinmod.vcf
+    """
+}
+// Adding SweGen allele frequencies
+process swegen_all {
+    input:
+    set group, file(vcf) from sweall
+    output:
+    set group, file("${group}.swegen.vcf") into splice
+    """
+    echo "$SNPSIFT annotate $SWEGEN -name swegen -info AF $vcf" > ${group}.swegen.vcf
+    """
+}
+// Annotating variants with Genmod
+// Marking splice INDELs: 
+// Annotating delins with cadd: 
+process annotate_genmod {
+    input:
+    set group, file(vcf) from splice
+    output:
+    set group, file("${group}.genmod.marksplice.addcadd.vcf") into inheritance
+    """
+    echo "$GENMOD annotate --spidex $SPIDEX --annotate_regions $vcf -o ${group}.genmod.vcf" 
+    echo "$MARKSPLICE ${group}.genmod.vcf" > ${group}.genmod.marksplice.vcf
+    echo "$ADDCADD -i ${group}.genmod.marksplice.vcf -o ${group}.genmod.marksplice.addcadd.vcf -t ${OUTDIR}/tmp/exome/${group}.addcadd" > ${group}.genmod.marksplice.addcadd.vcf
+    """
+}
 
-// # Adding SweGen allele frequencies: 6427-13
+// # Annotating variant inheritance models: 
+process annotate_genmod {
+    input:
+    set group, file(vcf) from splice
+    output:
+    set group, file("${group}.vcf") into splice
+    """
 
-// # Annotating variants with Genmod: 6427-13
+    """
+}
+// # Extracting most severe consequence: 
 
-// # Marking splice INDELs: 6427-13
+// # Modifying annotations by VEP-plugins, and adding to info-field: 
 
-// # Annotating delins with cadd: 6427-13
+// # Adding loqusdb allele frequency to info-field: 
 
-// # Annotating variant inheritance models: 6427-13
+// # Scoring variants: 
 
-// # Extracting most severe consequence: 6427-13
+// # Adjusting compound scores: 
 
-// # Modifying annotations by VEP-plugins, and adding to info-field: 6427-13
+// # Sorting VCF according to score: 
 
-// # Adding loqusdb allele frequency to info-field: 6427-13
+// # Bgzipping and indexing VCF: 
 
-// # Scoring variants: 6427-13
+// # Renaming VCF:
 
-// # Adjusting compound scores: 6427-13
+// # Indexing VCF: 
 
-// # Sorting VCF according to score: 6427-13
+// # Creating madeline pedigree: 
 
-// # Bgzipping and indexing VCF: 6427-13
+// # Running PEDDY: 
 
-// # Renaming VCF: 6427-13
+// # Running gSNP:
 
-// # Indexing VCF: 6427-13
+// # Uploading case to scout:
 
-// # Creating madeline pedigree: 6427-13
+// # Registering contamination data:
 
-// # Running PEDDY: 6427-13
-
-// # Running gSNP: 6427-13
-
-// # Uploading case to scout: 6427-13
-
-// # Registering contamination data: 6427-13
-
-// # Uploading variants to loqusdb: 6427-13
+// # Uploading variants to loqusdb:
 
