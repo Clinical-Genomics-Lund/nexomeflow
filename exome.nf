@@ -15,10 +15,10 @@ regions_bed = file(params.bed)
 // SOFTWARE-BIN
 VCFMULTI = "/data/bnf/sw/vcflib/bin/vcfbreakmulti"
 BCFTOOLS = "/data/bnf/sw/bcftools-1.3.1/bcftools"
-
+SENT = "/data/bnf/sw/sentieon/sentieon-genomics-201808.01/bin/sentieon"
+GATK = "/data/bnf/sw/gatk/4.1.0.0/gatk --java-options '-Xmx12G'"
 // VEP 
 VEP = "/data/bnf/sw/ensembl-vep-95/vep"
-    FIX_VEP = "/data/bnf/scripts/fix_empty_vep_vcf.pl"
     CADD = "/data/bnf/sw/.vep/PluginData/whole_genome_SNVs_1.4.tsv.gz"
     VEP_FASTA = "/data/bnf/sw/.vep/homo_sapiens/87_GRCh37/Homo_sapiens.GRCh37.75.dna.primary_assembly.fa"
     MAXENTSCAN = "/data/bnf/sw/ensembl-vep-95/.vep/Plugins/MaxEntScan_scripts"
@@ -37,11 +37,13 @@ GENMOD = "/home/bjorn/miniconda2/bin/genmod"
     SPIDEX = "/data/bnf/ref/annotations_dbs/hg19_spidex.tsv.gz"
     MARKSPLICE = "/data/bnf/scripts//mark_spliceindels.pl"
     ADDCADD = "/data/bnf/scripts/add_missing_CADDs_1.4.sh"
+    MOSTSEV = "/data/bnf/scripts/most_severe_consequence.pl"
 
 
 
-
-
+csv = file(params.csv)
+mode = csv.countLines() > 2 ? "family" : "single"
+println(mode)
 
 Channel
     .fromPath(params.csv)
@@ -59,21 +61,29 @@ Channel
 
 // alignment using sentieon-bwa
 process bwa_align {
-    cpus 20
-    // publishDir '/trannel/proj/cmd-pipe/test-files/bam', mode: 'copy', overwrite: 'false'
+    cpus 8
+    publishDir "$OUTDIR/tmp/exome/", mode: 'copy', overwrite: 'true'
 
     input: 
-	//set group, id, file(read1), file(read2) from fastq
-    set clarity_sample_id, id, assay, sex, diagnosis, phenotype, group, father, mother, clarity_pool_id, platform, file(read1), file(read2), analysis_dir from fastq
+    set clarity_sample_id, id, assay, sex, diagnosis, phenotype, group, father, mother, clarity_pool_id, platform, read1, read2, analysis_dir from fastq
 
     output:
-    set group, id, analysis_dir, file("${id}_bwa.sort.bam") into bwa_bam
+    set group, id, analysis_dir, file("${id}_bwa.sort.bam"), file("${id}_bwa.sort.bam.bai") into bwa_bam
 
     script:
 	"""
-    echo "$read1+$read2" > ${id}_bwa.sort.bam
+    $SENT bwa mem -M \\
+    -R '@RG\\tID:${id}\\tSM:${id}\\tPL:illumina' \\
+    -t ${task.cpus} \\
+    $genome_file \\
+    ${read1} ${read2} | \\
+    $SENT util sort \\
+    -r $genome_file \\
+    -o ${id}_bwa.sort.bam \\
+    -t ${task.cpus} \\
+    --sam2bam -i -
     """
-    //    /data/bnf/sw/sentieon/sentieon-genomics-201808.01/bin/sentieon bwa mem -M -R '@RG\\tID:${id}\\tSM:${id}\\tPL:illumina' -t ${task.cpus} $genome_file $read1 $read2 | /data/bnf/sw/sentieon/sentieon-genomics-201808.01/bin/sentieon util sort -r $genome_file -o ${id}_bwa.sort.bam -t ${task.cpus} --sam2bam -i -
+    
 
 }
 
@@ -81,17 +91,20 @@ process bwa_align {
 process markdup {
     cpus 10
     input:
-	set group, id, analysis_dir, file(sorted_bam) from bwa_bam
+	set group, id, analysis_dir, file(sorted_bam), file(bai) from bwa_bam
 
     output:
-	set group, val(id), analysis_dir, file("${id}.markdup.bam") into bam_markdup
+	set group, val(id), analysis_dir, file("${id}.markdup.bam"), file("${id}.markdup.bam.bai") into bam_markdup
     
     script:
     """
-    wc -l $sorted_bam > ${id}.markdup.bam
+    $SENT driver -t ${task.cpus} -i $sorted_bam \\
+    --algo LocusCollector --fun score_info SCORE.gz
+    $SENT driver -t ${task.cpus} -i $sorted_bam \\
+    --algo Dedup --rmdup --score_info SCORE.gz  \\
+    --metrics DEDUP_METRIC_TXT ${id}.markdup.bam   
     """
-    //    sambamba markdup --tmpdir /data/tmp -t ${task.cpus} $sorted_bam ${id}.markdup.bam
-
+     //sambamba markdup --tmpdir /data/tmp -t ${task.cpus} $sorted_bam ${id}.markdup.bam
 }
 
 // split output channels, one for qc one for variantcalling
@@ -105,7 +118,7 @@ process post_align_qc {
     cpus 6
 
     input:
-    set group, id, analysis_dir, file(markdup_bam) from bam_marked1
+    set group, id, analysis_dir, file(markdup_bam), file(bai) from bam_marked1
     output:
     set id, analysis_dir, file("${id}.bwa.qc") into bam_qc
 
@@ -121,7 +134,7 @@ process post_align_qc {
 
 // upload qc to CDM if upload flag is in use
 process upload {
-    publishDir "${OUTDIR}/postmap/exome", mode: 'copy', overwrite: 'true'
+    //publishDir "${OUTDIR}/postmap/exome", mode: 'copy', overwrite: 'true'
     input:
     set id, analysis_dir, file(qc) from bam_qc
 
@@ -140,16 +153,20 @@ process upload {
 
 process DNAscope {
     cpus 6
-    publishDir "${OUTDIR}/tmp/exome/", mode: 'copy', overwrite: 'true'
+   // publishDir "${OUTDIR}/tmp/exome/", mode: 'copy', overwrite: 'true'
     input:
-    set group, id, analysis_dir, file(bam) from bam_marked2
+    set group, id, analysis_dir, file(bam),file(bai) from bam_marked2
     output:
-    set group, id, file("${id}.${group}.gvcf") into gvcf
+    set group, id, file("${id}.${group}.gvcf"), file("${id}.${group}.gvcf.idx") into gvcf
     script:
+    
     """
-    echo "${id} hej hej hej" > ${id}.${group}.gvcf
+    $SENT driver -t ${task.cpus} -r $genome_file -i $bam \\
+    --algo DNAscope --emit_mode GVCF ${id}.${group}.gvcf
     """
+    
 // --emit_mode GVCF
+//echo "${id} hej hej hej" > ${id}.${group}.gvcf
 }
 
 
@@ -159,31 +176,26 @@ process gvcf_combine {
 
     publishDir "${OUTDIR}/tmp/exome/", mode: 'copy', overwrite: 'true'
     input:
-    set group, id, file(bam) from gvcf.groupTuple()
+    set group, id, file(vcf), file(idx) from gvcf.groupTuple()
 
     output:
-    set group, file("${group}.concat.count") into g_gvcf
+    set group, file("${group}.combined.gvcf"), file("${group}.combined.gvcf.idx") into g_gvcf
 
     script:
     // Om fler än en vcf, GVCF combine annars döp om och skickade vidare
-    // lägg till lista för alla outcomes, ensam vcf/multiple vcf
-    bam = bam + [1]
-    // antal element
-    bam_l =  bam.size()
-    // om 3 eller fler == multivcf
-    if (bam_l >= 3) {
-        bam = bam - [1]
-        ggvcfs = bam.join(' --variant ')
+    if (mode =~ /family/ ) {
+    ggvcfs = vcf.join(' --variant ')
     """
     echo "${ggvcfs}" > ${group}.concat.count
     """
     }
     // annars ensam vcf, skicka vidare
     else {
-    bam = bam - [1]
-    ggvcf = bam.join('')
+    ggvcf = vcf.join('')
+    gidx = idx.join('')
     """
-    mv ${ggvcf} ${group}.concat.count
+    mv ${ggvcf} ${group}.combined.gvcf
+    mv ${gidx} ${group}.combined.gvcf.idx
     """
     }
 
@@ -194,13 +206,17 @@ process gvcf_genotype {
     publishDir "${OUTDIR}/tmp/exome/", mode: 'copy', overwrite: 'true'
 
     input:
-    set group, file(vcf) from g_gvcf
+    set group, file(vcf), file(idx) from g_gvcf
     output:
-    set group, file("${group}.vcf") into split
+    set group, file("${group}.gvcf"), file("${group}.gvcf.idx") into split
     """
-    echo "FINAL" > ${group}.vcf
+    $GATK GenotypeGVCFs \\
+    -R $genome_file \\
+    -L $regions_bed \\
+    --variant $vcf \\
+    -O ${group}.gvcf
     """
-
+//echo "FINAL" > ${group}.vcf
 }
 
 // skapa en pedfil, ändra input istället för sök ersätt?
@@ -237,23 +253,20 @@ process create_ped {
 // collects each individual's ped-line and creates on ped-file
 ped_ch
     .collectFile(storeDir: "${OUTDIR}/ped/exome")
-    .set{ lines }
+    .into{ ped_mad; peddy; ped_inher }
     
 
 // madeleine ped om familj
-process madeleine_ped {
+process madeleine {
     publishDir "${OUTDIR}/ped/exome", mode: 'copy' , overwrite: 'true'
     input:
-    file(ped) from lines
+    file(ped) from ped_mad
 
     output:
     file("hej")
 
     script:
-    // funktion som räknar antalet individer i ped
-    def bla = file("${OUTDIR}" + "/ped/exome/" + ped)
-    no_lines =  bla.countLines()
-    if (no_lines >= 2) {
+    if (mode =~ /family/ ) {
 
     """
     echo "FAMILJ" > hej
@@ -273,31 +286,27 @@ process madeleine_ped {
 process split_normalize {
     
     input:
-    set group, file(vcf) from split
+    set group, file(vcf), file(idx) from split
     output:
     set group, file("${group}.norm.DPAF.vcf") into vep
 
 
     """
-    echo "$VCFMULTI ${vcf}" > ${group}.multibreak.vcf
-    echo "$BCFTOOLS norm -m-both -c w -O v -f $genome_file -o ${group}.norm.vcf ${group}.multibreak.vcf" > ${group}.norm.vcf
-    echo "/data/bnf/scripts/exome_DPAF_filter.pl ${group}.norm.vcf" > ${group}.norm.DPAF.vcf
+    $VCFMULTI ${vcf} > ${group}.multibreak.vcf
+    $BCFTOOLS norm -m-both -c w -O v -f $genome_file -o ${group}.norm.vcf ${group}.multibreak.vcf
+    /data/bnf/scripts/exome_DPAF_filter.pl ${group}.norm.vcf > ${group}.norm.DPAF.vcf
     """
 }
 
-// # Annotating variants with VEP: 
+// Annotating variants with VEP: 
 
 process annotate_vep {
-    
     input:
     set group, file(vcf) from vep
-
     output:
     set group, file("${group}.vep.vcf") into snpsift
-    
     """
-    echo \\
-    "$VEP \\
+    $VEP \\
     -i ${vcf} \\
     -o ${group}.vep.vcf \\
     --offline \\
@@ -313,13 +322,11 @@ process annotate_vep {
     -custom $GNOMAD \\
     -custom $GERP \\
     -custom $PHYLOP \\
-    -custom $PHASTCONS \\
-    " > ${group}.vep.vcf
-    echo "$FIX_VEP $vcf ${group}.vep.vcf" > ${group}.vep.vcf
+    -custom $PHASTCONS
     """
-
 }
-// # Annotating variants with SnpSift 2
+
+// Annotating variants with SnpSift 2
 
 process snp_sift {
 
@@ -368,17 +375,22 @@ process annotate_genmod {
     """
 }
 
-// # Annotating variant inheritance models: 
-process annotate_genmod {
-    input:
-    set group, file(vcf) from splice
-    output:
-    set group, file("${group}.vcf") into splice
-    """
+// # Annotating variant inheritance models:
+// # Extracting most severe consequence: 
+process inher_models {
+    //publishDir "${OUTDIR}/tmp/exome", mode: 'copy' , overwrite: 'true'
 
+    input:
+    set group, file(vcf) from inheritance
+    file(ped) from ped_inher
+    output:
+    set group, file("${group}.models.mostsev.vcf") into vepmod
+    """
+    echo "$GENMOD models $vcf -f $ped" > ${group}.models.vcf
+    echo "$MOSTSEV < ${group}.models.vcf > ${group}.models.mostsev.vcf" > ${group}.models.mostsev.vcf
     """
 }
-// # Extracting most severe consequence: 
+
 
 // # Modifying annotations by VEP-plugins, and adding to info-field: 
 
@@ -392,18 +404,17 @@ process annotate_genmod {
 
 // # Bgzipping and indexing VCF: 
 
-// # Renaming VCF:
-
-// # Indexing VCF: 
-
-// # Creating madeline pedigree: 
-
 // # Running PEDDY: 
 
 // # Running gSNP:
 
 // # Uploading case to scout:
+// process scout {
 
+//     input:
+
+
+// }
 // # Registering contamination data:
 
 // # Uploading variants to loqusdb:
