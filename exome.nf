@@ -164,20 +164,26 @@ process insertSize {
 
 process depthstats {
     cpus 6
-    publishDir "${OUTDIR}/postmap/exome", mode: 'copy', overwrite: 'true'
     input:
     set group, id, analysis_dir, file(bam), file(bai) from bam_marked5
+    output:
+    set id, analysis_dir, file("${id}.basecov.bed") into qc_depth
+    """
+    $SAMBAMBA depth base -c 0 -t ${task.cpus} -L $regions_bed $bam > ${id}.basecov.bed
+    """
+}
+process combine_qc {
+    input:
+    set id, analysis_dir, file(depth) from qc_depth
     file(hs) from qc_hsmetrics
     file(reads) from qc_reads
     file(ins) from qc_inssize    
     output:
     set id, analysis_dir, file("${id}.bwa.qc") into qc_done
     """
-    $SAMBAMBA depth base -c 0 -t ${task.cpus} -L $regions_bed $bam > ${id}.basecov.bed
-    $POSTQC $hs $reads $ins ${id}.basecov.bed > ${id}.bwa.qc
+    $POSTQC $hs $reads $ins $depth $id > ${id}.bwa.qc
     """
 }
-
 
 // upload qc to CDM if upload flag is in use
 process upload {
