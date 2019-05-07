@@ -17,6 +17,11 @@ VCFMULTI = "/data/bnf/sw/vcflib/bin/vcfbreakmulti"
 BCFTOOLS = "/data/bnf/sw/bcftools-1.3.1/bcftools"
 SENT = "/data/bnf/sw/sentieon/sentieon-genomics-201808.01/bin/sentieon"
 GATK = "/data/bnf/sw/gatk/4.1.0.0/gatk --java-options '-Xmx12G'"
+//PICARD = "java -jar /data/bnf/sw/picard/2.8.1/picard.jar"
+PICARD = "java -Xmx12g -jar /data/bnf/sw/picard/2.18.15/picard/build/libs/picard.jar"
+SAMBAMBA = "/data/bnf/sw/sambamba/0.6.7/sambamba"
+// PERL
+POSTQC = "/trannel/proj/cmd-pipe/nexomeflow/bin/postaln_qc_nexomeflow.pl"
 // VEP 
 VEP = "/data/bnf/sw/ensembl-vep-95/vep"
     CADD = "/data/bnf/sw/.vep/PluginData/whole_genome_SNVs_1.4.tsv.gz"
@@ -87,7 +92,7 @@ process bwa_align {
 
 }
 
-// mark duplicates, will switch to sentieon
+// mark duplicates
 process markdup {
     cpus 10
     input:
@@ -107,36 +112,78 @@ process markdup {
      //sambamba markdup --tmpdir /data/tmp -t ${task.cpus} $sorted_bam ${id}.markdup.bam
 }
 
-// split output channels, one for qc one for variantcalling
+// split output channels, 4 for qc 1 for variantcalling
 bam_markdup.into {
     bam_marked1
     bam_marked2
+    bam_marked3
+    bam_marked4
+    bam_marked5
 }
 
-// post alignement qc
-process post_align_qc {
+// post alignement qc BLOCK
+process hsmetrics {
     cpus 6
-
     input:
-    set group, id, analysis_dir, file(markdup_bam), file(bai) from bam_marked1
+    set group, id, analysis_dir, file(bam), file(bai) from bam_marked1
     output:
-    set id, analysis_dir, file("${id}.bwa.qc") into bam_qc
-
-
+    file("${id}.markdup.bam.hsmetrics") into qc_hsmetrics
     script:
+    bait_i = regions_bed + ".interval_list"
+    bed_i = regions_bed + ".interval_list"
     """
-    echo "${analysis_dir}" > ${id}.bwa.qc
+    $PICARD CollectHsMetrics I=$bam O=${id}.markdup.bam.hsmetrics R=$genome_file BAIT_INTERVALS=$bait_i TARGET_INTERVALS=$bed_i
     """
   //  /data/bnf/scripts/postaln_qc.pl $markdup_bam $regions_bed ${id} ${task.cpus} $regions_bed $genome_file > ${id}.bwa.qc
 
 
 }
 
+process reads {
+    cpus 6
+    input:
+    set group, id, analysis_dir, file(bam), file(bai) from bam_marked3
+    output:
+    file("${id}.markdup.bam.reads") into qc_reads
+    script:
+    """
+    $SAMBAMBA flagstat -t ${task.cpus} $bam > ${id}.markdup.bam.reads
+    """
+}
+
+process insertSize {
+    input:
+    set group, id, analysis_dir, file(bam), file(bai) from bam_marked4
+    output:
+    file("${id}.markdup.bam.inssize") into qc_inssize
+    script:
+    """
+    $PICARD CollectInsertSizeMetrics I=${bam} O=${id}.markdup.bam.inssize H=${id}.markdup.bam.ins.pdf STOP_AFTER=1000000
+    """
+}
+
+process depthstats {
+    cpus 6
+    publishDir "${OUTDIR}/postmap/exome", mode: 'copy', overwrite: 'true'
+    input:
+    set group, id, analysis_dir, file(bam), file(bai) from bam_marked5
+    file(hs) from qc_hsmetrics
+    file(reads) from qc_reads
+    file(ins) from qc_inssize    
+    output:
+    set id, analysis_dir, file("${id}.bwa.qc") into qc_done
+    """
+    $SAMBAMBA depth base -c 0 -t ${task.cpus} -L $regions_bed $bam > ${id}.basecov.bed
+    $POSTQC $hs $reads $ins ${id}.basecov.bed > ${id}.bwa.qc
+    """
+}
+
+
 // upload qc to CDM if upload flag is in use
 process upload {
-    //publishDir "${OUTDIR}/postmap/exome", mode: 'copy', overwrite: 'true'
+    publishDir "${OUTDIR}/postmap/exome", mode: 'copy', overwrite: 'true'
     input:
-    set id, analysis_dir, file(qc) from bam_qc
+    set id, analysis_dir, file(qc) from qc_done
 
     output:
     set id, file("${id}.qc.upload")
@@ -145,7 +192,7 @@ process upload {
 
     script:
     """
-    echo "${analysis_dir} ${qc}" > ${id}.qc.upload
+    cat $qc > ${id}.qc.upload
     """
     
     // /data/bnf/scripts/register_sample.pl --run-folder ${analysis_dir} --sample-id ${id} --assay exome --qc ${qc}
@@ -306,7 +353,8 @@ process annotate_vep {
     output:
     set group, file("${group}.vep.vcf") into snpsift
     """
-    $VEP \\
+    echo \\
+    "$VEP \\
     -i ${vcf} \\
     -o ${group}.vep.vcf \\
     --offline \\
@@ -322,7 +370,7 @@ process annotate_vep {
     -custom $GNOMAD \\
     -custom $GERP \\
     -custom $PHYLOP \\
-    -custom $PHASTCONS
+    -custom $PHASTCONS" > ${group}.vep.vcf
     """
 }
 
