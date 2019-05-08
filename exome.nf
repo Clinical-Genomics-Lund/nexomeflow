@@ -8,7 +8,8 @@ OUTDIR = file(params.outdir)
 // might move these to config
 genome_file = file(params.fasta)
 regions_bed = file(params.bed)
-
+rank_model_s = "/data/bnf/ref/scout/rank_model_cmd_v3_single_withoutmodels.ini"
+rank_model = "/data/bnf/ref/scout/rank_model_cmd_v3.ini"
 
 
 
@@ -20,8 +21,12 @@ GATK = "/data/bnf/sw/gatk/4.1.0.0/gatk --java-options '-Xmx12G'"
 //PICARD = "java -jar /data/bnf/sw/picard/2.8.1/picard.jar"
 PICARD = "java -Xmx12g -jar /data/bnf/sw/picard/2.18.15/picard/build/libs/picard.jar"
 SAMBAMBA = "/data/bnf/sw/sambamba/0.6.7/sambamba"
+MADELINE = "/data/bnf/sw/madeline/2.0/madeline2"
 // PERL
 POSTQC = "/trannel/proj/cmd-pipe/nexomeflow/bin/postaln_qc_nexomeflow.pl"
+MODVCF = "/trannel/proj/cmd-pipe/nexomeflow/bin/modify_vcf_nexomeflow.pl"
+MARKSPLICE = "/data/bnf/scripts//mark_spliceindels.pl"
+LOQDB = "/data/bnf/scripts/loqus_db_filter.pl"
 // VEP 
 VEP = "/data/bnf/sw/ensembl-vep-95/vep"
     CADD = "/data/bnf/sw/.vep/PluginData/whole_genome_SNVs_1.4.tsv.gz"
@@ -35,14 +40,10 @@ VEP = "/data/bnf/sw/ensembl-vep-95/vep"
 // SNPSIFT
 SNPSIFT = "java -jar /data/bnf/sw/snpEff/4.3/SnpSift.jar"
     CLINVAR = "/data/bnf/ref/annotations_dbs/clinvar_20190225.vcf.gz"
-    CLINMOD = "/data/bnf/scripts/modify_CLNSIG_NEW.pl"
     SWEGEN = "/data/bnf/ref/annotations_dbs/swegen_20170823/anon-SweGen_STR_NSPHS_1000samples_freq_hg19.vcf.gz"
 // GENMOD
-GENMOD = "/home/bjorn/miniconda2/bin/genmod"
     SPIDEX = "/data/bnf/ref/annotations_dbs/hg19_spidex.tsv.gz"
-    MARKSPLICE = "/data/bnf/scripts//mark_spliceindels.pl"
     ADDCADD = "/data/bnf/scripts/add_missing_CADDs_1.4.sh"
-    MOSTSEV = "/data/bnf/scripts/most_severe_consequence.pl"
 
 
 
@@ -236,10 +237,14 @@ process gvcf_combine {
 
     script:
     // Om fler än en vcf, GVCF combine annars döp om och skickade vidare
-    if (mode =~ /family/ ) {
+    if (mode == "family" ) {
     ggvcfs = vcf.join(' --variant ')
     """
-    echo "${ggvcfs}" > ${group}.concat.count
+    $GATK CombineGVCFs \\
+    -R $genome_file \\
+    -L $regions_bed \\
+    --variant $ggvcfs \\
+    -O ${group}.combined.gvcf
     """
     }
     // annars ensam vcf, skicka vidare
@@ -306,31 +311,26 @@ process create_ped {
 // collects each individual's ped-line and creates on ped-file
 ped_ch
     .collectFile(storeDir: "${OUTDIR}/ped/exome")
-    .into{ ped_mad; peddy; ped_inher }
+    .into{ ped_mad; ped_peddy; ped_inher }
     
 
 // madeleine ped om familj
-process madeleine {
+process madeline {
+    conda '/data/bnf/sw/miniconda3/envs/genmod'
     publishDir "${OUTDIR}/ped/exome", mode: 'copy' , overwrite: 'true'
     input:
     file(ped) from ped_mad
 
     output:
-    file("hej")
+    set file("${ped}.madeline"), file("${ped}.madeline.xml")
 
+    when:
+    mode == "family"
     script:
-    if (mode =~ /family/ ) {
-
     """
-    echo "FAMILJ" > hej
+    ped_parser -t ped $ped --to_madeline -o ${ped}.madeline
+    $MADELINE -L "IndividualId" ${ped}.madeline -o ${ped}.madeline -x xml
     """
-    }
-    else {
-    """
-    echo "singel" > hej
-    """
-    }
-
 }
 
 
@@ -408,18 +408,14 @@ process swegen_all {
     """
 }
 // Annotating variants with Genmod
-// Marking splice INDELs: 
-// Annotating delins with cadd: 
 process annotate_genmod {
     conda '/data/bnf/sw/miniconda3/envs/genmod'
     input:
     set group, file(vcf) from sweall
     output:
-    set group, file("${group}.genmod.marksplice.addcadd.vcf") into genmod
+    set group, file("${group}.genmod.vcf") into genmod
     """
-    genmod annotate --spidex $SPIDEX --annotate_regions $vcf -o ${group}.genmod.vcf
-    $MARKSPLICE ${group}.genmod.vcf > ${group}.genmod.marksplice.vcf
-    $ADDCADD -i ${group}.genmod.marksplice.vcf -o ${group}.genmod.marksplice.addcadd.vcf -t ${OUTDIR}/tmp/exome/${group}.addcadd > ${group}.genmod.marksplice.addcadd.vcf
+    genmod annotate --spidex $SPIDEX --cadd_file $CADD --annotate_regions $vcf -o ${group}.genmod.vcf
     """
 }
 
@@ -436,31 +432,104 @@ process inher_models {
     """
 }
 
-// # Modifying CLNSIG field to allow it to be used by genmod score properly:
-// process clinsigmod {
-//     input:
-//     set group, file(vcf) from snpsift
-//     output:
-//     set group, file("${group}.clinmod.vcf") into sweall
-//     """
-//     echo "$CLINMOD $vcf" > ${group}.clinmod.vcf
-//     """
-// } echo "$MOSTSEV < ${group}.models.vcf > ${group}.models.mostsev.vcf" > ${group}.models.mostsev.vcf
-// # Extracting most severe consequence: 
-// # Modifying annotations by VEP-plugins, and adding to info-field: 
 
-// # Adding loqusdb allele frequency to info-field: 
+// Extracting most severe consequence: 
+// Modifying annotations by VEP-plugins, and adding to info-field: 
+// Modifying CLNSIG field to allow it to be used by genmod score properly:
+process modify_vcf {
+    input:
+    set group, file(vcf) from inhermod
+    output:
+    set group, file("${group}.mod.vcf") into mod_vcf
+    """
+    $MODVCF $vcf > ${group}.mod.vcf
+    """
+} 
 
-// # Scoring variants: 
 
-// # Adjusting compound scores: 
+// Adding loqusdb allele frequency to info-field: 
+// ssh needs to work from anywhere, filesystems mounted on cmdscout
+process loqdb {
+    input:
+    set group, file(vcf) from mod_vcf
+    output:
+    set group, file("${group}.loqdb.vcf") into loqdb_vcf
+    """
+    $LOQDB $vcf > ${group}.loqdb.vcf
+    """
+    // ssh cmdscout1.lund.skane.se 
+}
+// Marking splice INDELs: 
+// Annotating delins with cadd: 
+process splicecadd {
+    input:
+    set group, file(vcf) from loqdb_vcf
+    output:
+    set group, file("${group}.marksplice.addcadd.vcf") into splice_cadd
+    """
+    $MARKSPLICE $vcf > ${group}.marksplice.vcf
+    $ADDCADD -i ${group}.marksplice.vcf -o ${group}.marksplice.addcadd.vcf -t ${OUTDIR}/tmp/exome/${group}.addcadd
+    """
+}
+// Scoring variants: 
+// Adjusting compound scores: 
+// Sorting VCF according to score: 
 
-// # Sorting VCF according to score: 
+process genmodscore {
+    conda '/data/bnf/sw/miniconda3/envs/genmod'
+    input:
+    set group, file(vcf) from splice_cadd
+    output:
+    set group, file("${group}.scored.vcf") into scored_vcf
+    script:
+    if (mode == "familiy") {
+        """
+        genmod score -i $group -c $rank_model -r $vcf -o ${group}.score1.vcf
+        genmod compound ${group}.score1.vcf > ${group}.score2.vcf
+        genmod sort -p -f $group ${group}.score2.vcf -o ${group}.scored.vcf
+        """
+    }
+    else {
+        """
+        genmod score -i $group -c $rank_model_s -r $vcf -o ${group}.score1.vcf
+        genmod sort -p -f $group ${group}.score1.vcf -o ${group}.scored.vcf
+        """
+    }
 
-// # Bgzipping and indexing VCF: 
+}
 
-// # Running PEDDY: 
+// Bgzipping and indexing VCF: 
+process vcf_completion {
+    publishDir "${OUTDIR}/vcf/exome/", mode: 'copy', overwrite: 'true'
+    input:
+    set group, file(vcf) from scored_vcf
+    output:
+    set group, file("${group}.scored.vcf.gz"), file("${group}.scored.vcf.gz.tbi") into vcf_done
+    """
+    bgzip $vcf -f
+    tabix ${vcf}.gz -f
+    """
+}
 
+vcf_done.into {
+    vcf_done1
+    vcf_done2
+}
+
+// Running PEDDY: 
+process peddy {
+    conda '/data/bnf/sw/miniconda3/envs/peddy'
+    publishDir "${OUTDIR}/ped/exome", mode: 'copy' , overwrite: 'true'
+    cpus 6
+    input:
+    file(ped) from ped_peddy
+    set group, file(vcf), file(idx) from vcf_done1
+    output:
+    set file(),file(),file()
+    """
+    python -m peddy -p ${task.cpus} $vcf $ped --prefix $ped
+    """
+}
 // # Running gSNP:
 
 // # Uploading case to scout:
