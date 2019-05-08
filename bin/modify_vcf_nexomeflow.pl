@@ -6,7 +6,7 @@ my %vcf_meta;
 my @vcf_data;
 my @head;
 open(VEP, $ARGV[0]);
-my $c = 0;
+
 
 
 
@@ -67,8 +67,11 @@ while( <VEP>) {
     ## Print and store Meta-info
     if( /^##/ ) {
         print;
-        $c++;
-        if ( $c == 10 ) {
+        my( $type, $meta ) = parse_metainfo( $_ );
+	    $vcf_meta{$type}->{$meta->{ID}} = $meta if defined $type;
+    }
+    # Print and store header
+    elsif( /^#/ ) {
         print "##INFO\=<ID=GNOMADAF\,Number=1\,Type=Float,Description=\"Average AF GnomAD\">\n";
         print "##INFO=<ID=GNOMADAF_MAX,Number=1,Type=Float,Description=\"Highest reported AF in gnomAD\">\n";
         print "##INFO=<ID=dbNSFP_GERP___RS,Number=1,Type=Float,Description=\"GERP score\">\n";
@@ -76,18 +79,9 @@ while( <VEP>) {
         print "##INFO=<ID=dbNSFP_phastCons100way_vertebrate,Number=1,Type=Float,Description=\"phastcons score\">\n";
         print "##INFO=<ID=CLNSIG_MOD,Number=.,Type=String,Description=\"Modified Variant Clinical Significance, for genmod score _0_ - Uncertain significance, _1_ - not provided, _2_ - Benign, _3_ - Likely benign, _4_ - Likely pathogenic, _5_ - Pathogenic, _6_ - drug response, _7_ - histocompatibility, _255_ - other\">\n";
         print "##INFO=<ID=most_severe_consequence,Number=.,Type=String,Description=\"Most severe genomic consequence.\">\n";
-        }
-        my( $type, $meta ) = parse_metainfo( $_ );
-	    $vcf_meta{$type}->{$meta->{ID}} = $meta if defined $type;
-
-
-    }
-    # Print and store header
-    elsif( /^#/ ) {
 	    print;
         $_ =~ s/^#//;
 	    @head = split /\t/;
-
     }
     # Print and store variant information, add gnomadg and conservation scores
     # to info-field.
@@ -106,7 +100,8 @@ while( <VEP>) {
              push @add_info_field,"GNOMADAF=$gAF";
         }
         my @sub_pop_af;
-        foreach my $subpop (keys $doobi->{INFO}->{CSQ}->[0]) {
+        my $max_ref = $doobi->{INFO}->{CSQ}->[0];
+        foreach my $subpop (keys %$max_ref) {
             if ($subpop =~ /gnomADg_AF_/) {
                 push  @sub_pop_af,$doobi->{INFO}->{CSQ}->[0]{$subpop};
             }
