@@ -7,6 +7,62 @@ my @vcf_data;
 my @head;
 open(VEP, $ARGV[0]);
 my $c = 0;
+
+
+
+my %clinmod = (
+    "Pathogenic" => "_5_",
+    "Likely_pathogenic" => "_4_",
+    "Likely_benign" => "_3_",
+    "Benign" => "_2_",
+    "Uncertain_significance" => "_0_",
+    "not_provided" => "_1_", 
+    "drug_response" => "_6_"
+);
+
+
+my %rank = (
+    'transcript_ablation' => 1,
+    'initiator_codon_variant' => 2,
+    'frameshift_variant' => 3,
+    'stop_gained' => 4,
+    'start_lost' => 5,
+    'stop_lost' => 6,
+    'splice_acceptor_variant' => 7,
+    'splice_donor_variant' => 8,
+    'inframe_deletion' => 9,
+    'transcript_amplification' => 10,
+    'splice_region_variant' => 11,
+    'missense_variant' => 12,
+    'protein_altering_variant' => 13,
+    'inframe_insertion' => 14,
+    'incomplete_terminal_codon_variant' => 15,
+    'non_coding_transcript_exon_variant' => 16,
+    'synonymous_variant' => 17,
+    'mature_mirna_variant' => 18,
+    'non_coding_transcript_variant' => 19,
+    'regulatory_region_variant' => 20,
+    'upstream_gene_variant' => 21,
+    'regulatory_region_amplification' => 22,
+    'tfbs_amplification' => 23,
+    '5_prime_utr_variant' => 24,
+    'intron_variant' => 25,
+    '3_prime_utr_variant' => 26,
+    'feature_truncation' => 27,
+    'tf_binding_site_variant' => 28,
+    'start_retained_variant' => 29,
+    'stop_retained_variant' => 30,
+    'feature_elongation' => 31,
+    'regulatory_region_ablation' => 32,
+    'tfbs_ablation' => 33,
+    'coding_sequence_variant' => 34,
+    'downstream_gene_variant' => 35,
+    'nmd_transcript_variant' => 36,
+    'intergenic_variant' => 37
+    );
+
+
+
 while( <VEP>) {
     ## Print and store Meta-info
     if( /^##/ ) {
@@ -18,6 +74,8 @@ while( <VEP>) {
         print "##INFO=<ID=dbNSFP_GERP___RS,Number=1,Type=Float,Description=\"GERP score\">\n";
         print "##INFO=<ID=dbNSFP_phyloP100way_vertebrate,Number=1,Type=Float,Description=\"phyloP100 score\">\n";
         print "##INFO=<ID=dbNSFP_phastCons100way_vertebrate,Number=1,Type=Float,Description=\"phastcons score\">\n";
+        print "##INFO=<ID=CLNSIG_MOD,Number=.,Type=String,Description=\"Modified Variant Clinical Significance, for genmod score _0_ - Uncertain significance, _1_ - not provided, _2_ - Benign, _3_ - Likely benign, _4_ - Likely pathogenic, _5_ - Pathogenic, _6_ - drug response, _7_ - histocompatibility, _255_ - other\">\n";
+        print "##INFO=<ID=most_severe_consequence,Number=.,Type=String,Description=\"Most severe genomic consequence.\">\n";
         }
         my( $type, $meta ) = parse_metainfo( $_ );
 	    $vcf_meta{$type}->{$meta->{ID}} = $meta if defined $type;
@@ -36,7 +94,7 @@ while( <VEP>) {
     else {
         my $doobi = parse_variant( $_, \@head, \%vcf_meta );
         my @add_info_field;
-
+        #print Dumper($doobi);
         my @VARIANTS = split /\t/;
         print join "\t", @VARIANTS[0..6];
 
@@ -71,6 +129,31 @@ while( <VEP>) {
          if ($pP) {
             push @add_info_field,"dbNSFP_phyloP100way_vertebrate=$pP";
         }
+        ## CLINSIG MODIFY
+        my $csM = $doobi->{INFO}->{CLNSIG};
+        my @mods;
+        if (defined $csM) {
+            my @CSm = split/,/,$csM;
+            foreach my $entry (@CSm) {
+                if ($clinmod{$entry}) {
+                    push @mods,$clinmod{$entry};
+                }
+                else {
+                    push @mods,"_255_";
+                }
+            }
+            push @add_info_field, "CLNSIG_MOD=".join('|',@mods);
+        }
+        ## MOST SEVERE CONEQUENCE
+        my $csq_ref = $doobi->{INFO}->{CSQ};
+        my $m_s_c = CSQ($csq_ref);
+        my $most_severe = ".";
+        if (@$m_s_c) {
+            $_ = lc for @$m_s_c;
+		    $most_severe = (sort { $rank{$a} <=> $rank{$b} } @$m_s_c)[0];
+        }
+        push @add_info_field, "most_severe_consequence=".$most_severe;
+
         #Add new info field information
         push @info_field, @add_info_field;
         #print new and old information
@@ -239,4 +322,34 @@ sub excel_float {
 
     $val =~ s/\./,/;
     return $val;
+}
+
+
+# THESE ARE ALL COUNTED AS "other":
+
+#      4 Affects
+#     14 association
+#      2 _association
+#     92 Conflicting_interpretations_of_pathogenicity
+#      3 other
+#      4 _other
+#      6 protective
+#      2 _protective
+#     11 _risk_factor
+#     37 risk_factor
+
+
+sub CSQ {
+	my ($csq) = shift;
+    my @all_csq;
+    foreach my $b (@$csq) {
+        ## if canon pick consensus conseqeunce or if equal most severe ^
+            my $tmp = $b->{Consequence};
+            foreach my $conq (@$tmp) {
+               push @all_csq, $conq;
+            }
+    
+    }
+    return \@all_csq; 
+
 }

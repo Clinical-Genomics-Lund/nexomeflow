@@ -140,7 +140,7 @@ process hsmetrics {
 }
 
 process reads {
-    cpus 6
+    cpus 1
     input:
     set group, id, analysis_dir, file(bam), file(bai) from bam_marked3
     output:
@@ -163,7 +163,7 @@ process insertSize {
 }
 
 process depthstats {
-    cpus 6
+    cpus 10
     input:
     set group, id, analysis_dir, file(bam), file(bai) from bam_marked5
     output:
@@ -261,7 +261,7 @@ process gvcf_genotype {
     input:
     set group, file(vcf), file(idx) from g_gvcf
     output:
-    set group, file("${group}.gvcf"), file("${group}.gvcf.idx") into split
+    set group, file("${group}.gvcf"), file("${group}.gvcf.idx") into genotype
     """
     $GATK GenotypeGVCFs \\
     -R $genome_file \\
@@ -339,9 +339,9 @@ process madeleine {
 process split_normalize {
     
     input:
-    set group, file(vcf), file(idx) from split
+    set group, file(vcf), file(idx) from genotype
     output:
-    set group, file("${group}.norm.DPAF.vcf") into vep
+    set group, file("${group}.norm.DPAF.vcf") into split
 
 
     """
@@ -355,16 +355,19 @@ process split_normalize {
 
 process annotate_vep {
     input:
-    set group, file(vcf) from vep
+    set group, file(vcf) from split
     output:
-    set group, file("${group}.vep.vcf") into snpsift
+    set group, file("${group}.vep.vcf") into vep
     """
-    echo \\
-    "$VEP \\
+    $VEP \\
     -i ${vcf} \\
     -o ${group}.vep.vcf \\
     --offline \\
     --merged \\
+    --everything \\
+    --vcf \\
+    --no_stats \\
+    --force_overwrite \\
     --plugin CADD $CADD \\
     --plugin LoFtool \\
     --plugin MaxEntScan,$MAXENTSCAN,SWA,NCSS \\
@@ -376,7 +379,7 @@ process annotate_vep {
     -custom $GNOMAD \\
     -custom $GERP \\
     -custom $PHYLOP \\
-    -custom $PHASTCONS" > ${group}.vep.vcf
+    -custom $PHASTCONS
     """
 }
 
@@ -385,67 +388,65 @@ process annotate_vep {
 process snp_sift {
 
     input:
-    set group, file(vcf) from snpsift
+    set group, file(vcf) from vep
     output:
-    set group, file("${group}.clinvar.vcf") into clinmod
+    set group, file("${group}.clinvar.vcf") into snpsift
     """
-    echo "$SNPSIFT annotate $CLINVAR -info CLNSIG,CLNACC,CLNREVSTAT $vcf" > ${group}.clinvar.vcf
+    $SNPSIFT annotate $CLINVAR -info CLNSIG,CLNACC,CLNREVSTAT $vcf > ${group}.clinvar.vcf
     """
 
 }
 
-// # Modifying CLNSIG field to allow it to be used by genmod score properly:
-process clinsigmod {
-    input:
-    set group, file(vcf) from clinmod
-    output:
-    set group, file("${group}.clinmod.vcf") into sweall
-    """
-    echo "$CLINMOD $vcf" > ${group}.clinmod.vcf
-    """
-}
 // Adding SweGen allele frequencies
 process swegen_all {
     input:
-    set group, file(vcf) from sweall
+    set group, file(vcf) from snpsift
     output:
-    set group, file("${group}.swegen.vcf") into splice
+    set group, file("${group}.swegen.vcf") into sweall
     """
-    echo "$SNPSIFT annotate $SWEGEN -name swegen -info AF $vcf" > ${group}.swegen.vcf
+    $SNPSIFT annotate $SWEGEN -name swegen -info AF $vcf > ${group}.swegen.vcf
     """
 }
 // Annotating variants with Genmod
 // Marking splice INDELs: 
 // Annotating delins with cadd: 
 process annotate_genmod {
+    conda '/data/bnf/sw/miniconda3/envs/genmod'
     input:
-    set group, file(vcf) from splice
+    set group, file(vcf) from sweall
     output:
-    set group, file("${group}.genmod.marksplice.addcadd.vcf") into inheritance
+    set group, file("${group}.genmod.marksplice.addcadd.vcf") into genmod
     """
-    echo "$GENMOD annotate --spidex $SPIDEX --annotate_regions $vcf -o ${group}.genmod.vcf" 
-    echo "$MARKSPLICE ${group}.genmod.vcf" > ${group}.genmod.marksplice.vcf
-    echo "$ADDCADD -i ${group}.genmod.marksplice.vcf -o ${group}.genmod.marksplice.addcadd.vcf -t ${OUTDIR}/tmp/exome/${group}.addcadd" > ${group}.genmod.marksplice.addcadd.vcf
+    genmod annotate --spidex $SPIDEX --annotate_regions $vcf -o ${group}.genmod.vcf
+    $MARKSPLICE ${group}.genmod.vcf > ${group}.genmod.marksplice.vcf
+    $ADDCADD -i ${group}.genmod.marksplice.vcf -o ${group}.genmod.marksplice.addcadd.vcf -t ${OUTDIR}/tmp/exome/${group}.addcadd > ${group}.genmod.marksplice.addcadd.vcf
     """
 }
 
 // # Annotating variant inheritance models:
-// # Extracting most severe consequence: 
 process inher_models {
-    //publishDir "${OUTDIR}/tmp/exome", mode: 'copy' , overwrite: 'true'
-
+    conda '/data/bnf/sw/miniconda3/envs/genmod'
     input:
-    set group, file(vcf) from inheritance
+    set group, file(vcf) from genmod
     file(ped) from ped_inher
     output:
-    set group, file("${group}.models.mostsev.vcf") into vepmod
+    set group, file("${group}.models.vcf") into inhermod
     """
-    echo "$GENMOD models $vcf -f $ped" > ${group}.models.vcf
-    echo "$MOSTSEV < ${group}.models.vcf > ${group}.models.mostsev.vcf" > ${group}.models.mostsev.vcf
+    genmod models $vcf -f $ped > ${group}.models.vcf
     """
 }
 
-
+// # Modifying CLNSIG field to allow it to be used by genmod score properly:
+// process clinsigmod {
+//     input:
+//     set group, file(vcf) from snpsift
+//     output:
+//     set group, file("${group}.clinmod.vcf") into sweall
+//     """
+//     echo "$CLINMOD $vcf" > ${group}.clinmod.vcf
+//     """
+// } echo "$MOSTSEV < ${group}.models.vcf > ${group}.models.mostsev.vcf" > ${group}.models.mostsev.vcf
+// # Extracting most severe consequence: 
 // # Modifying annotations by VEP-plugins, and adding to info-field: 
 
 // # Adding loqusdb allele frequency to info-field: 
