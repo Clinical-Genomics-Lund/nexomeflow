@@ -27,6 +27,7 @@ POSTQC = "/trannel/proj/cmd-pipe/nexomeflow/bin/postaln_qc_nexomeflow.pl"
 MODVCF = "/trannel/proj/cmd-pipe/nexomeflow/bin/modify_vcf_nexomeflow.pl"
 MARKSPLICE = "/data/bnf/scripts//mark_spliceindels.pl"
 LOQDB = "/data/bnf/scripts/loqus_db_filter.pl"
+REGCDM = "/data/bnf/scripts/register_sample.pl"
 // VEP 
 VEP = "/data/bnf/sw/ensembl-vep-95/vep"
     CADD = "/data/bnf/sw/.vep/PluginData/whole_genome_SNVs_1.4.tsv.gz"
@@ -67,15 +68,11 @@ Channel
 
 // alignment using sentieon-bwa
 process bwa_align {
-    cpus 8
-    publishDir "$OUTDIR/tmp/exome/", mode: 'copy', overwrite: 'true'
-
+    cpus 12
     input: 
     set clarity_sample_id, id, assay, sex, diagnosis, phenotype, group, father, mother, clarity_pool_id, platform, read1, read2, analysis_dir from fastq
-
     output:
     set group, id, analysis_dir, file("${id}_bwa.sort.bam"), file("${id}_bwa.sort.bam.bai") into bwa_bam
-
     script:
 	"""
     $SENT bwa mem -M \\
@@ -89,8 +86,6 @@ process bwa_align {
     -t ${task.cpus} \\
     --sam2bam -i -
     """
-    
-
 }
 
 // mark duplicates
@@ -110,7 +105,6 @@ process markdup {
     --algo Dedup --rmdup --score_info SCORE.gz  \\
     --metrics DEDUP_METRIC_TXT ${id}.markdup.bam   
     """
-     //sambamba markdup --tmpdir /data/tmp -t ${task.cpus} $sorted_bam ${id}.markdup.bam
 }
 
 // split output channels, 4 for qc 1 for variantcalling
@@ -202,12 +196,11 @@ process upload {
     cat $qc > ${id}.qc.upload
     """
     
-    // /data/bnf/scripts/register_sample.pl --run-folder ${analysis_dir} --sample-id ${id} --assay exome --qc ${qc}
+    // $REGCDM --run-folder ${analysis_dir} --sample-id ${id} --assay exome --qc ${qc}
 }
 
 process DNAscope {
-    cpus 6
-   // publishDir "${OUTDIR}/tmp/exome/", mode: 'copy', overwrite: 'true'
+    cpus 12
     input:
     set group, id, analysis_dir, file(bam),file(bai) from bam_marked2
     output:
@@ -218,16 +211,12 @@ process DNAscope {
     $SENT driver -t ${task.cpus} -r $genome_file -i $bam \\
     --algo DNAscope --emit_mode GVCF ${id}.${group}.gvcf
     """
-    
-// --emit_mode GVCF
-//echo "${id} hej hej hej" > ${id}.${group}.gvcf
 }
 
 
 
 process gvcf_combine {
     cpus 6
-
     publishDir "${OUTDIR}/tmp/exome/", mode: 'copy', overwrite: 'true'
     input:
     set group, id, file(vcf), file(idx) from gvcf.groupTuple()
@@ -238,13 +227,10 @@ process gvcf_combine {
     script:
     // Om fler än en vcf, GVCF combine annars döp om och skickade vidare
     if (mode == "family" ) {
-    ggvcfs = vcf.join(' --variant ')
+    ggvcfs = vcf.join(' -v ')
     """
-    $GATK CombineGVCFs \\
-    -R $genome_file \\
-    -L $regions_bed \\
-    --variant $ggvcfs \\
-    -O ${group}.combined.gvcf
+    $SENT driver -t ${task.cpus} -r $genome_file --algo GVCFtyper \\
+    -v $ggvcfs ${group}.combined.gvcf
     """
     }
     // annars ensam vcf, skicka vidare
@@ -256,35 +242,14 @@ process gvcf_combine {
     mv ${gidx} ${group}.combined.gvcf.idx
     """
     }
-
-}
-
-process gvcf_genotype {
-    cpus 6
-    publishDir "${OUTDIR}/tmp/exome/", mode: 'copy', overwrite: 'true'
-
-    input:
-    set group, file(vcf), file(idx) from g_gvcf
-    output:
-    set group, file("${group}.gvcf"), file("${group}.gvcf.idx") into genotype
-    """
-    $GATK GenotypeGVCFs \\
-    -R $genome_file \\
-    -L $regions_bed \\
-    --variant $vcf \\
-    -O ${group}.gvcf
-    """
-//echo "FINAL" > ${group}.vcf
 }
 
 // skapa en pedfil, ändra input istället för sök ersätt?
 process create_ped {
     input:
     set group, id, sex, mother, father, phenotype from ped
-
     output:
     file("${group}.ped") into ped_ch
-
     script:
     if ( sex =~ /F/) {
         sex = "2"
@@ -314,16 +279,14 @@ ped_ch
     .into{ ped_mad; ped_peddy; ped_inher }
     
 
-// madeleine ped om familj
+// madeline ped om familj
 process madeline {
     conda '/data/bnf/sw/miniconda3/envs/genmod'
     publishDir "${OUTDIR}/ped/exome", mode: 'copy' , overwrite: 'true'
     input:
     file(ped) from ped_mad
-
     output:
     set file("${ped}.madeline"), file("${ped}.madeline.xml")
-
     when:
     mode == "family"
     script:
@@ -339,7 +302,7 @@ process madeline {
 process split_normalize {
     
     input:
-    set group, file(vcf), file(idx) from genotype
+    set group, file(vcf), file(idx) from g_gvcf
     output:
     set group, file("${group}.norm.DPAF.vcf") into split
 
