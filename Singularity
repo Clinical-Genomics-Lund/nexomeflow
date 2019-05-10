@@ -2,22 +2,24 @@ Bootstrap:docker
 From:nfcore/base
 
 %labels
-	MAINTAINER Björn Hallström <bjorn.hallstrom@skane.se>
-	DESCRIPTION Singularity container for CMD twist pipeline
+	MAINTAINER Viktor henmyr <viktor.henmyr@skane.se>
+	DESCRIPTION Singularity container for CMD exome pipeline
 	VERSION 0.0.1
 
 %environment
-	PATH=/opt/conda/envs/CMD-twist/bin:/opt/sentieon-genomics-201808.01/bin/:$PATH
+	PATH=/opt/conda/envs/exome_general/bin:/opt/sentieon-genomics-201808.01/bin/:$PATH
 	PICARD_HOME=/opt/conda/envs/CMD-twist/share/picard-2.18.26-0/
 
 
 %files
-        environment.yml /
-        /data/bnf/scripts/postaln_qc.pl /usr/local/bin
+        exome_conda.yml /
+        bin/ /opt
 	/data/bnf/sw/sentieon/sentieon-genomics-201808.01 /opt
-        data/GenomeAnalysisTK-3.8.tar.bz2 /opt
 
 %post
-	/opt/conda/bin/conda env create -f /environment.yml
-	/opt/conda/bin/conda clean -a
-	#gatk3-register /opt/sentieon-genomics-201808.01
+	/opt/conda/bin/conda env create -f /exome_conda.yml
+	apt -y install libz-dev
+	apt -y install build-essential
+	/opt/conda/envs/exome_general/bin/pip install genmod
+	/opt/conda/envs/exome_general/bin/pip install ped_parser
+	#/opt/conda/bin/conda clean -a

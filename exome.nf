@@ -317,6 +317,7 @@ process split_normalize {
 // Annotating variants with VEP: 
 
 process annotate_vep {
+    cpus 6
     input:
     set group, file(vcf) from split
     output:
@@ -330,6 +331,7 @@ process annotate_vep {
     --everything \\
     --vcf \\
     --no_stats \\
+    --fork ${task.cpus} \\
     --force_overwrite \\
     --plugin CADD $CADD \\
     --plugin LoFtool \\
@@ -428,10 +430,10 @@ process splicecadd {
     input:
     set group, file(vcf) from loqdb_vcf
     output:
-    set group, file("${group}.marksplice.addcadd.vcf") into splice_cadd
+    set group, file("${group}.marksplice.cadd.vcf") into splice_cadd
     """
     $MARKSPLICE $vcf > ${group}.marksplice.vcf
-    $ADDCADD -i ${group}.marksplice.vcf -o ${group}.marksplice.addcadd.vcf -t ${OUTDIR}/tmp/exome/${group}.addcadd
+    $ADDCADD -i ${group}.marksplice.vcf -o ${group}.marksplice.cadd.vcf -t ${OUTDIR}/tmp/exome/${group}.addcadd
     """
 }
 // Scoring variants: 
@@ -445,7 +447,7 @@ process genmodscore {
     output:
     set group, file("${group}.scored.vcf") into scored_vcf
     script:
-    if (mode == "familiy") {
+    if (mode == "family") {
         """
         genmod score -i $group -c $rank_model -r $vcf -o ${group}.score1.vcf
         genmod compound ${group}.score1.vcf > ${group}.score2.vcf
@@ -463,13 +465,14 @@ process genmodscore {
 
 // Bgzipping and indexing VCF: 
 process vcf_completion {
+    cpus 5
     publishDir "${OUTDIR}/vcf/exome/", mode: 'copy', overwrite: 'true'
     input:
     set group, file(vcf) from scored_vcf
     output:
     set group, file("${group}.scored.vcf.gz"), file("${group}.scored.vcf.gz.tbi") into vcf_done
     """
-    bgzip $vcf -f
+    bgzip -@ ${task.cpus} $vcf -f
     tabix ${vcf}.gz -f
     """
 }
@@ -490,7 +493,7 @@ process peddy {
     output:
     set file(),file(),file()
     """
-    python -m peddy -p ${task.cpus} $vcf $ped --prefix $ped
+    python -m peddy -p ${task.cpus} $vcf $ped --prefix $group
     """
 }
 // # Running gSNP:

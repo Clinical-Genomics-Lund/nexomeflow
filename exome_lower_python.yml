@@ -1,0 +1,8 @@
+name: test
+channels:
+    - bioconda
+    - conda-forge
+    - defaults
+
+dependencies:
+    - pip=9.0.3

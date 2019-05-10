@@ -1,0 +1,13 @@
+vcflib(vcfbreakmulti)
+bcftools
+sentieon
+picard
+sambamba
+madeline
+vep
+peddy (conda)
+genmod (pip)
+snpsift
+gatk4.1
+ped_parser (pip)
+tabix
