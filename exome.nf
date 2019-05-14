@@ -14,19 +14,16 @@ rank_model = "/data/bnf/ref/scout/rank_model_cmd_v3.ini"
 
 
 // SOFTWARE-BIN
-VCFMULTI = "/data/bnf/sw/vcflib/bin/vcfbreakmulti"
-BCFTOOLS = "/data/bnf/sw/bcftools-1.3.1/bcftools"
-SENT = "/data/bnf/sw/sentieon/sentieon-genomics-201808.01/bin/sentieon"
-GATK = "/data/bnf/sw/gatk/4.1.0.0/gatk --java-options '-Xmx12G'"
-//PICARD = "java -jar /data/bnf/sw/picard/2.8.1/picard.jar"
-PICARD = "java -Xmx12g -jar /data/bnf/sw/picard/2.18.15/picard/build/libs/picard.jar"
-SAMBAMBA = "/data/bnf/sw/sambamba/0.6.7/sambamba"
-MADELINE = "/data/bnf/sw/madeline/2.0/madeline2"
+//SENT = "/data/bnf/sw/sentieon/sentieon-genomics-201808.01/bin/sentieon"
+SENT = "/opt/sentieon-genomics-201808.01/bin/sentieon"
+//PICARD = "java -Xmx12g -jar /data/bnf/sw/picard/2.18.15/picard/build/libs/picard.jar"
+PICARD = "java -Xmx12g -jar /picard/build/libs/picard.jar"
+MADELINE = "/usr/local/bin/madeline2"
 // PERL
-POSTQC = "/trannel/proj/cmd-pipe/nexomeflow/bin/postaln_qc_nexomeflow.pl"
-MODVCF = "/trannel/proj/cmd-pipe/nexomeflow/bin/modify_vcf_nexomeflow.pl"
+POSTQC = "/opt/bin/postaln_qc_nexomeflow.pl"
+MODVCF = "/opt/bin/modify_vcf_nexomeflow.pl"
 MARKSPLICE = "/data/bnf/scripts//mark_spliceindels.pl"
-LOQDB = "/data/bnf/scripts/loqus_db_filter.pl"
+LOQDB = "/opt/bin/loqus_db_filter.pl"
 REGCDM = "/data/bnf/scripts/register_sample.pl"
 // VEP 
 VEP = "/data/bnf/sw/ensembl-vep-95/vep"
@@ -39,7 +36,8 @@ VEP = "/data/bnf/sw/ensembl-vep-95/vep"
     PHYLOP =  "/data/bnf/ref/annotations_dbs/VEP_conservation/hg19.100way.phyloP100way.bw,phyloP100way,bigwig"
     PHASTCONS = "/data/bnf/ref/annotations_dbs/VEP_conservation/hg19.100way.phastCons.bw,phastCons,bigwig"
 // SNPSIFT
-SNPSIFT = "java -jar /data/bnf/sw/snpEff/4.3/SnpSift.jar"
+//SNPSIFT = "java -jar /data/bnf/sw/snpEff/4.3/SnpSift.jar"
+SNPSIFT = "java -jar /opt/conda/envs/exome_general/share/snpsift-4.3.1t-1/SnpSift.jar"
     CLINVAR = "/data/bnf/ref/annotations_dbs/clinvar_20190225.vcf.gz"
     SWEGEN = "/data/bnf/ref/annotations_dbs/swegen_20170823/anon-SweGen_STR_NSPHS_1000samples_freq_hg19.vcf.gz"
 // GENMOD
@@ -142,11 +140,12 @@ process reads {
     file("${id}.markdup.bam.reads") into qc_reads
     script:
     """
-    $SAMBAMBA flagstat -t ${task.cpus} $bam > ${id}.markdup.bam.reads
+    sambamba flagstat -t ${task.cpus} $bam > ${id}.markdup.bam.reads
     """
 }
 
 process insertSize {
+    errorStrategy 'ignore'
     input:
     set group, id, analysis_dir, file(bam), file(bai) from bam_marked4
     output:
@@ -164,7 +163,7 @@ process depthstats {
     output:
     set id, analysis_dir, file("${id}.basecov.bed") into qc_depth
     """
-    $SAMBAMBA depth base -c 0 -t ${task.cpus} -L $regions_bed $bam > ${id}.basecov.bed
+    sambamba depth base -c 0 -t ${task.cpus} -L $regions_bed $bam > ${id}.basecov.bed
     """
 }
 process combine_qc {
@@ -209,7 +208,7 @@ process DNAscope {
     
     """
     $SENT driver -t ${task.cpus} -r $genome_file -i $bam \\
-    --algo DNAscope --emit_mode GVCF ${id}.${group}.gvcf
+    --interval $regions_bed --algo DNAscope --emit_mode GVCF ${id}.${group}.gvcf
     """
 }
 
@@ -281,7 +280,7 @@ ped_ch
 
 // madeline ped om familj
 process madeline {
-    conda '/data/bnf/sw/miniconda3/envs/genmod'
+    //conda '/data/bnf/sw/miniconda3/envs/genmod'
     publishDir "${OUTDIR}/ped/exome", mode: 'copy' , overwrite: 'true'
     input:
     file(ped) from ped_mad
@@ -308,8 +307,8 @@ process split_normalize {
 
 
     """
-    $VCFMULTI ${vcf} > ${group}.multibreak.vcf
-    $BCFTOOLS norm -m-both -c w -O v -f $genome_file -o ${group}.norm.vcf ${group}.multibreak.vcf
+    vcfbreakmulti ${vcf} > ${group}.multibreak.vcf
+    bcftools norm -m-both -c w -O v -f $genome_file -o ${group}.norm.vcf ${group}.multibreak.vcf
     /data/bnf/scripts/exome_DPAF_filter.pl ${group}.norm.vcf > ${group}.norm.DPAF.vcf
     """
 }
@@ -317,13 +316,14 @@ process split_normalize {
 // Annotating variants with VEP: 
 
 process annotate_vep {
+    container = 'container_VEP.sif'
     cpus 6
     input:
     set group, file(vcf) from split
     output:
     set group, file("${group}.vep.vcf") into vep
     """
-    $VEP \\
+    vep \\
     -i ${vcf} \\
     -o ${group}.vep.vcf \\
     --offline \\
@@ -351,7 +351,7 @@ process annotate_vep {
 // Annotating variants with SnpSift 2
 
 process snp_sift {
-
+    //conda '/opt/conda/envs/exome_general'
     input:
     set group, file(vcf) from vep
     output:
@@ -374,7 +374,7 @@ process swegen_all {
 }
 // Annotating variants with Genmod
 process annotate_genmod {
-    conda '/data/bnf/sw/miniconda3/envs/genmod'
+    //conda '/data/bnf/sw/miniconda3/envs/genmod'
     input:
     set group, file(vcf) from sweall
     output:
@@ -386,7 +386,7 @@ process annotate_genmod {
 
 // # Annotating variant inheritance models:
 process inher_models {
-    conda '/data/bnf/sw/miniconda3/envs/genmod'
+    //conda '/data/bnf/sw/miniconda3/envs/genmod'
     input:
     set group, file(vcf) from genmod
     file(ped) from ped_inher
@@ -441,7 +441,7 @@ process splicecadd {
 // Sorting VCF according to score: 
 
 process genmodscore {
-    conda '/data/bnf/sw/miniconda3/envs/genmod'
+    //conda '/data/bnf/sw/miniconda3/envs/genmod'
     input:
     set group, file(vcf) from splice_cadd
     output:
@@ -484,7 +484,7 @@ vcf_done.into {
 
 // Running PEDDY: 
 process peddy {
-    conda '/data/bnf/sw/miniconda3/envs/peddy'
+    //conda '/data/bnf/sw/miniconda3/envs/peddy'
     publishDir "${OUTDIR}/ped/exome", mode: 'copy' , overwrite: 'true'
     cpus 6
     input:
