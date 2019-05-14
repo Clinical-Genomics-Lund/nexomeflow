@@ -1,0 +1,1 @@
+sudo singularity build container_VEP.sif Singularity_vep
