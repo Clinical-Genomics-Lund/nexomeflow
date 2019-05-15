@@ -7,7 +7,7 @@ From:nfcore/base
 	VERSION 0.0.1
 
 %environment
-	PATH=/opt/conda/envs/exome_general/bin:/opt/sentieon-genomics-201808.05/bin/:$PATH
+	PATH=/opt/conda/envs/exome_general/bin:/opt/sentieon-genomics-201808.05/bin/:/opt/bin:$PATH
 	PICARD_HOME=/opt/conda/envs/exome_conda/share/picard-2.18.26-0/
 
 

@@ -14,35 +14,25 @@ rank_model = "/data/bnf/ref/scout/rank_model_cmd_v3.ini"
 
 
 // SOFTWARE-BIN
-//SENT = "/data/bnf/sw/sentieon/sentieon-genomics-201808.01/bin/sentieon"
-//SENT = "/opt/sentieon-genomics-201808.01/bin/sentieon"
-//PICARD = "java -Xmx12g -jar /data/bnf/sw/picard/2.18.15/picard/build/libs/picard.jar"
-PICARD = "picard -Xmx12g"
-MADELINE = "/usr/local/bin/madeline2"
-// PERL
-POSTQC = "/opt/bin/postaln_qc_nexomeflow.pl"
-MODVCF = "/opt/bin/modify_vcf_nexomeflow.pl"
 MARKSPLICE = "/data/bnf/scripts//mark_spliceindels.pl"
-LOQDB = "/opt/bin/loqus_db_filter.pl"
 REGCDM = "/data/bnf/scripts/register_sample.pl"
 // VEP 
-VEP = "/data/bnf/sw/ensembl-vep-95/vep"
-    CADD = "/data/bnf/sw/.vep/PluginData/whole_genome_SNVs_1.4.tsv.gz"
-    VEP_FASTA = "/data/bnf/sw/.vep/homo_sapiens/87_GRCh37/Homo_sapiens.GRCh37.75.dna.primary_assembly.fa"
-    MAXENTSCAN = "/data/bnf/sw/ensembl-vep-95/.vep/Plugins/MaxEntScan_scripts"
-    VEP_CACHE = "/data/bnf/sw/ensembl-vep-95/.vep"
-    GNOMAD = "/data/bnf/ref/b37/gnomad.exomes.r2.0.1.sites.vcf___.gz,gnomADg,vcf,exact,0,AF,AF_AFR,AF_AMR,AF_ASJ,AF_EAS,AF_FIN,AF_NFE,AF_OTH"
-    GERP = "/data/bnf/ref/annotations_dbs/VEP_conservation/All_hg19_RS.bw,GERP,bigwig"
-    PHYLOP =  "/data/bnf/ref/annotations_dbs/VEP_conservation/hg19.100way.phyloP100way.bw,phyloP100way,bigwig"
-    PHASTCONS = "/data/bnf/ref/annotations_dbs/VEP_conservation/hg19.100way.phastCons.bw,phastCons,bigwig"
+CADD = "/data/bnf/sw/.vep/PluginData/whole_genome_SNVs_1.4.tsv.gz"
+VEP_FASTA = "/data/bnf/sw/.vep/homo_sapiens/87_GRCh37/Homo_sapiens.GRCh37.75.dna.primary_assembly.fa"
+MAXENTSCAN = "/data/bnf/sw/ensembl-vep-95/.vep/Plugins/MaxEntScan_scripts"
+VEP_CACHE = "/data/bnf/sw/ensembl-vep-95/.vep"
+GNOMAD = "/data/bnf/ref/b37/gnomad.exomes.r2.0.1.sites.vcf___.gz,gnomADg,vcf,exact,0,AF,AF_AFR,AF_AMR,AF_ASJ,AF_EAS,AF_FIN,AF_NFE,AF_OTH"
+GERP = "/data/bnf/ref/annotations_dbs/VEP_conservation/All_hg19_RS.bw,GERP,bigwig"
+PHYLOP =  "/data/bnf/ref/annotations_dbs/VEP_conservation/hg19.100way.phyloP100way.bw,phyloP100way,bigwig"
+PHASTCONS = "/data/bnf/ref/annotations_dbs/VEP_conservation/hg19.100way.phastCons.bw,phastCons,bigwig"
 // SNPSIFT
 //SNPSIFT = "java -jar /data/bnf/sw/snpEff/4.3/SnpSift.jar"
 SNPSIFT = "java -jar /opt/conda/envs/exome_general/share/snpsift-4.3.1t-1/SnpSift.jar"
-    CLINVAR = "/data/bnf/ref/annotations_dbs/clinvar_20190225.vcf.gz"
-    SWEGEN = "/data/bnf/ref/annotations_dbs/swegen_20170823/anon-SweGen_STR_NSPHS_1000samples_freq_hg19.vcf.gz"
+CLINVAR = "/data/bnf/ref/annotations_dbs/clinvar_20190225.vcf.gz"
+SWEGEN = "/data/bnf/ref/annotations_dbs/swegen_20170823/anon-SweGen_STR_NSPHS_1000samples_freq_hg19.vcf.gz"
 // GENMOD
-    SPIDEX = "/data/bnf/ref/annotations_dbs/hg19_spidex.tsv.gz"
-    ADDCADD = "/data/bnf/scripts/add_missing_CADDs_1.4.sh"
+SPIDEX = "/data/bnf/ref/annotations_dbs/hg19_spidex.tsv.gz"
+ADDCADD = "/data/bnf/scripts/add_missing_CADDs_1.4.sh"
 
 
 
@@ -125,7 +115,7 @@ process hsmetrics {
     bait_i = regions_bed + ".interval_list"
     bed_i = regions_bed + ".interval_list"
     """
-    $PICARD CollectHsMetrics I=$bam O=${id}.markdup.bam.hsmetrics R=$genome_file BAIT_INTERVALS=$bait_i TARGET_INTERVALS=$bed_i
+    picard -Xmx12g CollectHsMetrics I=$bam O=${id}.markdup.bam.hsmetrics R=$genome_file BAIT_INTERVALS=$bait_i TARGET_INTERVALS=$bed_i
     """
   //  /data/bnf/scripts/postaln_qc.pl $markdup_bam $regions_bed ${id} ${task.cpus} $regions_bed $genome_file > ${id}.bwa.qc
 
@@ -152,7 +142,7 @@ process insertSize {
     file("${id}.markdup.bam.inssize") into qc_inssize
     script:
     """
-    $PICARD CollectInsertSizeMetrics I=${bam} O=${id}.markdup.bam.inssize H=${id}.markdup.bam.ins.pdf STOP_AFTER=1000000
+    picard -Xmx12g CollectInsertSizeMetrics I=${bam} O=${id}.markdup.bam.inssize H=${id}.markdup.bam.ins.pdf STOP_AFTER=1000000
     """
 }
 
@@ -175,7 +165,7 @@ process combine_qc {
     output:
     set id, analysis_dir, file("${id}.bwa.qc") into qc_done
     """
-    $POSTQC $hs $reads $ins $depth $id > ${id}.bwa.qc
+    postaln_qc_nexomeflow.pl $hs $reads $ins $depth $id > ${id}.bwa.qc
     """
 }
 
@@ -291,7 +281,7 @@ process madeline {
     script:
     """
     ped_parser -t ped $ped --to_madeline -o ${ped}.madeline
-    $MADELINE -L "IndividualId" ${ped}.madeline -o ${ped}.madeline -x xml
+    madeline2 -L "IndividualId" ${ped}.madeline -o ${ped}.madeline -x xml
     """
 }
 
@@ -407,7 +397,7 @@ process modify_vcf {
     output:
     set group, file("${group}.mod.vcf") into mod_vcf
     """
-    $MODVCF $vcf > ${group}.mod.vcf
+    /opt/bin/modify_vcf_nexomeflow.pl $vcf > ${group}.mod.vcf
     """
 } 
 
@@ -420,7 +410,7 @@ process loqdb {
     output:
     set group, file("${group}.loqdb.vcf") into loqdb_vcf
     """
-    $LOQDB $vcf > ${group}.loqdb.vcf
+    /opt/bin/loqus_db_filter.pl $vcf > ${group}.loqdb.vcf
     """
     // ssh cmdscout1.lund.skane.se 
 }
