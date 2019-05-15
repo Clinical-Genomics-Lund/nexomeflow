@@ -14,14 +14,16 @@ rank_model = "/data/bnf/ref/scout/rank_model_cmd_v3.ini"
 
 
 // SOFTWARE-BIN
+<<<<<<< HEAD
 SENT = "/opt/sentieon-genomics-201808.01/bin/sentieon"
 PICARD = "java -Xmx12g -jar /opt/conda/envs/exome_general/share/picard-2.18.26-0/picard.jar"
 MADELINE = "/usr/local/bin/madeline2"
 // PERL
 POSTQC = "/opt/bin/postaln_qc_nexomeflow.pl"
 MODVCF = "/opt/bin/modify_vcf_nexomeflow.pl"
+=======
+>>>>>>> 2beff22a062ae94dd8f80fd42c279b808f9eeee3
 MARKSPLICE = "/data/bnf/scripts//mark_spliceindels.pl"
-LOQDB = "/opt/bin/loqus_db_filter.pl"
 REGCDM = "/data/bnf/scripts/register_sample.pl"
 // VEP 
 CADD = "/data/bnf/sw/.vep/PluginData/whole_genome_SNVs_1.4.tsv.gz"
@@ -69,12 +71,12 @@ process bwa_align {
     set group, id, analysis_dir, file("${id}_bwa.sort.bam"), file("${id}_bwa.sort.bam.bai") into bwa_bam
     script:
 	"""
-    $SENT bwa mem -M \\
+    sentieon bwa mem -M \\
     -R '@RG\\tID:${id}\\tSM:${id}\\tPL:illumina' \\
     -t ${task.cpus} \\
     $genome_file \\
     ${read1} ${read2} | \\
-    $SENT util sort \\
+    sentieon util sort \\
     -r $genome_file \\
     -o ${id}_bwa.sort.bam \\
     -t ${task.cpus} \\
@@ -93,9 +95,9 @@ process markdup {
     
     script:
     """
-    $SENT driver -t ${task.cpus} -i $sorted_bam \\
+    sentieon driver -t ${task.cpus} -i $sorted_bam \\
     --algo LocusCollector --fun score_info SCORE.gz
-    $SENT driver -t ${task.cpus} -i $sorted_bam \\
+    sentieon driver -t ${task.cpus} -i $sorted_bam \\
     --algo Dedup --rmdup --score_info SCORE.gz  \\
     --metrics DEDUP_METRIC_TXT ${id}.markdup.bam   
     """
@@ -121,7 +123,7 @@ process hsmetrics {
     bait_i = regions_bed + ".interval_list"
     bed_i = regions_bed + ".interval_list"
     """
-    $PICARD CollectHsMetrics I=$bam O=${id}.markdup.bam.hsmetrics R=$genome_file BAIT_INTERVALS=$bait_i TARGET_INTERVALS=$bed_i
+    picard -Xmx12g CollectHsMetrics I=$bam O=${id}.markdup.bam.hsmetrics R=$genome_file BAIT_INTERVALS=$bait_i TARGET_INTERVALS=$bed_i
     """
   //  /data/bnf/scripts/postaln_qc.pl $markdup_bam $regions_bed ${id} ${task.cpus} $regions_bed $genome_file > ${id}.bwa.qc
 
@@ -148,7 +150,7 @@ process insertSize {
     file("${id}.markdup.bam.inssize") into qc_inssize
     script:
     """
-    $PICARD CollectInsertSizeMetrics I=${bam} O=${id}.markdup.bam.inssize H=${id}.markdup.bam.ins.pdf STOP_AFTER=1000000
+    picard -Xmx12g CollectInsertSizeMetrics I=${bam} O=${id}.markdup.bam.inssize H=${id}.markdup.bam.ins.pdf STOP_AFTER=1000000
     """
 }
 
@@ -171,7 +173,7 @@ process combine_qc {
     output:
     set id, analysis_dir, file("${id}.bwa.qc") into qc_done
     """
-    $POSTQC $hs $reads $ins $depth $id > ${id}.bwa.qc
+    postaln_qc_nexomeflow.pl $hs $reads $ins $depth $id > ${id}.bwa.qc
     """
 }
 
@@ -203,7 +205,7 @@ process DNAscope {
     script:
     
     """
-    $SENT driver -t ${task.cpus} -r $genome_file -i $bam \\
+    sentieon driver -t ${task.cpus} -r $genome_file -i $bam \\
     --interval $regions_bed --algo DNAscope --emit_mode GVCF ${id}.${group}.gvcf
     """
 }
@@ -224,7 +226,7 @@ process gvcf_combine {
     if (mode == "family" ) {
     ggvcfs = vcf.join(' -v ')
     """
-    $SENT driver -t ${task.cpus} -r $genome_file --algo GVCFtyper \\
+    sentieon driver -t ${task.cpus} -r $genome_file --algo GVCFtyper \\
     -v $ggvcfs ${group}.combined.gvcf
     """
     }
@@ -287,7 +289,7 @@ process madeline {
     script:
     """
     ped_parser -t ped $ped --to_madeline -o ${ped}.madeline
-    $MADELINE -L "IndividualId" ${ped}.madeline -o ${ped}.madeline -x xml
+    madeline2 -L "IndividualId" ${ped}.madeline -o ${ped}.madeline -x xml
     """
 }
 
@@ -403,7 +405,7 @@ process modify_vcf {
     output:
     set group, file("${group}.mod.vcf") into mod_vcf
     """
-    $MODVCF $vcf > ${group}.mod.vcf
+    /opt/bin/modify_vcf_nexomeflow.pl $vcf > ${group}.mod.vcf
     """
 } 
 
@@ -416,7 +418,7 @@ process loqdb {
     output:
     set group, file("${group}.loqdb.vcf") into loqdb_vcf
     """
-    $LOQDB $vcf > ${group}.loqdb.vcf
+    /opt/bin/loqus_db_filter.pl $vcf > ${group}.loqdb.vcf
     """
     // ssh cmdscout1.lund.skane.se 
 }
