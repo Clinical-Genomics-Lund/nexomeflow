@@ -13,16 +13,6 @@ rank_model = "/data/bnf/ref/scout/rank_model_cmd_v3.ini"
 
 
 
-// SOFTWARE-BIN
-<<<<<<< HEAD
-SENT = "/opt/sentieon-genomics-201808.01/bin/sentieon"
-PICARD = "java -Xmx12g -jar /opt/conda/envs/exome_general/share/picard-2.18.26-0/picard.jar"
-MADELINE = "/usr/local/bin/madeline2"
-// PERL
-POSTQC = "/opt/bin/postaln_qc_nexomeflow.pl"
-MODVCF = "/opt/bin/modify_vcf_nexomeflow.pl"
-=======
->>>>>>> 2beff22a062ae94dd8f80fd42c279b808f9eeee3
 MARKSPLICE = "/data/bnf/scripts//mark_spliceindels.pl"
 REGCDM = "/data/bnf/scripts/register_sample.pl"
 // VEP 
