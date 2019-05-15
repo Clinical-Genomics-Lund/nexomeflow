@@ -5,4 +5,5 @@ work/
 *.sif
 data/
 test_run_*
+test.dag.png*
 sample.tsv

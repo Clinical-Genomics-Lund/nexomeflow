@@ -1,5 +1,0 @@
-{
-   "vep": "/data/bnf/sw/ensembl-vep-95/vep",
-   "gatk41":"/data/bnf/sw/gatk/4.1.0.0/gatk --java-options '-Xmx12G'",
-   "sent": "/data/bnf/sw/sentieon/sentieon-genomics-201808.01/bin/sentieon"   
-}
