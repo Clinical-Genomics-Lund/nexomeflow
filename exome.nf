@@ -15,9 +15,9 @@ rank_model = "/data/bnf/ref/scout/rank_model_cmd_v3.ini"
 
 // SOFTWARE-BIN
 //SENT = "/data/bnf/sw/sentieon/sentieon-genomics-201808.01/bin/sentieon"
-SENT = "/opt/sentieon-genomics-201808.01/bin/sentieon"
+//SENT = "/opt/sentieon-genomics-201808.01/bin/sentieon"
 //PICARD = "java -Xmx12g -jar /data/bnf/sw/picard/2.18.15/picard/build/libs/picard.jar"
-PICARD = "java -Xmx12g -jar /picard/build/libs/picard.jar"
+PICARD = "picard -Xmx12g"
 MADELINE = "/usr/local/bin/madeline2"
 // PERL
 POSTQC = "/opt/bin/postaln_qc_nexomeflow.pl"
@@ -73,12 +73,12 @@ process bwa_align {
     set group, id, analysis_dir, file("${id}_bwa.sort.bam"), file("${id}_bwa.sort.bam.bai") into bwa_bam
     script:
 	"""
-    $SENT bwa mem -M \\
+    sentieon bwa mem -M \\
     -R '@RG\\tID:${id}\\tSM:${id}\\tPL:illumina' \\
     -t ${task.cpus} \\
     $genome_file \\
     ${read1} ${read2} | \\
-    $SENT util sort \\
+    sentieon util sort \\
     -r $genome_file \\
     -o ${id}_bwa.sort.bam \\
     -t ${task.cpus} \\
@@ -97,9 +97,9 @@ process markdup {
     
     script:
     """
-    $SENT driver -t ${task.cpus} -i $sorted_bam \\
+    sentieon driver -t ${task.cpus} -i $sorted_bam \\
     --algo LocusCollector --fun score_info SCORE.gz
-    $SENT driver -t ${task.cpus} -i $sorted_bam \\
+    sentieon driver -t ${task.cpus} -i $sorted_bam \\
     --algo Dedup --rmdup --score_info SCORE.gz  \\
     --metrics DEDUP_METRIC_TXT ${id}.markdup.bam   
     """
@@ -207,7 +207,7 @@ process DNAscope {
     script:
     
     """
-    $SENT driver -t ${task.cpus} -r $genome_file -i $bam \\
+    sentieon driver -t ${task.cpus} -r $genome_file -i $bam \\
     --interval $regions_bed --algo DNAscope --emit_mode GVCF ${id}.${group}.gvcf
     """
 }
@@ -228,7 +228,7 @@ process gvcf_combine {
     if (mode == "family" ) {
     ggvcfs = vcf.join(' -v ')
     """
-    $SENT driver -t ${task.cpus} -r $genome_file --algo GVCFtyper \\
+    sentieon driver -t ${task.cpus} -r $genome_file --algo GVCFtyper \\
     -v $ggvcfs ${group}.combined.gvcf
     """
     }
