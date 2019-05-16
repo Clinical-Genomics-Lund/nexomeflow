@@ -18,6 +18,7 @@ dependencies:
     - bioconda::perl-vcftools-vcf=0.1.16
     - bioconda::vt=2015.11.10
     - bioconda::pybigwig
+    - perl-app-cpanminus
     #- mongodb
 
     
