@@ -1,13 +1,7 @@
 #!/usr/bin/perl -w
 use strict;
-use Getopt::Long;
 use MongoDB;
-use MongoDB::BSON;
-use MongoDB::Collection;
-use MongoDB::OID;
-use DateTime;
-use Data::Dumper;
-use JSON::Parse 'json_file_to_perl';
+
 
 # Script that queries loqusdb, must be run on cmdscout1
 # Annotates vcf with loqusdb frequency for each variant 
@@ -30,8 +24,8 @@ while ( <VCF>   ) {
 }
 close VCF;
 # Connect to mongodb
-#my $client = MongoDB->connect('mongodb://cmdscout2.lund.skane.se');
-my $client = MongoDB->connect();
+my $client = MongoDB->connect('mongodb://cmdscout2.lund.skane.se/loqusdb');
+#my $client = MongoDB->connect();
 
 my $CASES = $client->ns("loqusdb.case");
 my $VARS = $client->ns("loqusdb.variant");
