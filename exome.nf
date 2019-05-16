@@ -8,8 +8,8 @@ OUTDIR = file(params.outdir)
 // might move these to config
 genome_file = file(params.fasta)
 regions_bed = file(params.bed)
-rank_model_s = "/data/bnf/ref/scout/rank_model_cmd_v3_single_withoutmodels.ini"
-rank_model = "/data/bnf/ref/scout/rank_model_cmd_v3.ini"
+rank_model_s = "/rank_models/rank_model_cmd_v3_single_withoutmodels.ini"
+rank_model = "/rank_models/rank_model_cmd_v3.ini"
 
 
 
@@ -400,9 +400,10 @@ process modify_vcf {
 } 
 
 
-// Adding loqusdb allele frequency to info-field: 
-// ssh needs to work from anywhere, filesystems mounted on cmdscout
+Adding loqusdb allele frequency to info-field: 
+ssh needs to work from anywhere, filesystems mounted on cmdscout
 process loqdb {
+    //container = 'container_mongodb.sif'
     input:
     set group, file(vcf) from mod_vcf
     output:
@@ -420,8 +421,8 @@ process splicecadd {
     output:
     set group, file("${group}.marksplice.cadd.vcf") into splice_cadd
     """
-    $MARKSPLICE $vcf > ${group}.marksplice.vcf
-    $ADDCADD -i ${group}.marksplice.vcf -o ${group}.marksplice.cadd.vcf -t ${OUTDIR}/tmp/exome/${group}.addcadd
+    /opt/bin/mark_spliceindels.pl $vcf > ${group}.marksplice.vcf
+    add_missing_CADDs_1.4.sh -i ${group}.marksplice.vcf -o ${group}.marksplice.cadd.vcf -t ${OUTDIR}/tmp/exome/${group}.addcadd
     """
 }
 // Scoring variants: 
@@ -472,15 +473,16 @@ vcf_done.into {
 
 // Running PEDDY: 
 process peddy {
-    //conda '/data/bnf/sw/miniconda3/envs/peddy'
+    //conda '/opt/conda/envs/peddy'
     publishDir "${OUTDIR}/ped/exome", mode: 'copy' , overwrite: 'true'
     cpus 6
     input:
     file(ped) from ped_peddy
     set group, file(vcf), file(idx) from vcf_done1
     output:
-    set file(),file(),file()
+    set file("${group}.background_pca.json"),file("${group}.peddy.ped"),file("${group}.html"), file("${group}.het_check.csv"), file("${group}.sex_check.csv"), file("${group}.vs.html")
     """
+    source activate peddy
     python -m peddy -p ${task.cpus} $vcf $ped --prefix $group
     """
 }
