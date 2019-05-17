@@ -10,6 +10,8 @@ From:nfcore/base
 	PATH=/opt/conda/envs/exome_general/bin:/opt/sentieon-genomics-201808.05/bin/:/opt/bin:/opt/conda/envs/peddy/bin:$PATH
 	PICARD_HOME=/opt/conda/envs/exome_conda/share/picard-2.18.26-0/
 	export PERL5LIB=$PERL5LIB:/opt/conda/envs/exome_general/lib/site_perl/5.26.2/
+	export PERL5LIB=$PERL5LIB:/opt/conda/envs/exome_general/lib/site_perl/5.26.2/x86_64-linux-thread-multi/
+	export PERL5LIB=$PERL5LIB:/opt/bin/
 
 %files
     exome_conda.yml /
