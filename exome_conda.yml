@@ -20,5 +20,6 @@ dependencies:
     - bioconda::pybigwig
     - perl-app-cpanminus
     #- mongodb
+    - perl-gd
 
     
