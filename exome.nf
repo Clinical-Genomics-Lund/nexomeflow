@@ -11,9 +11,6 @@ regions_bed = file(params.bed)
 rank_model_s = "/rank_models/rank_model_cmd_v3_single_withoutmodels.ini"
 rank_model = "/rank_models/rank_model_cmd_v3.ini"
 
-
-
-MARKSPLICE = "/data/bnf/scripts//mark_spliceindels.pl"
 REGCDM = "/data/bnf/scripts/register_sample.pl"
 // VEP 
 CADD = "/data/bnf/sw/.vep/PluginData/whole_genome_SNVs_1.4.tsv.gz"
@@ -24,13 +21,12 @@ GNOMAD = "/data/bnf/ref/b37/gnomad.exomes.r2.0.1.sites.vcf___.gz,gnomADg,vcf,exa
 GERP = "/data/bnf/ref/annotations_dbs/VEP_conservation/All_hg19_RS.bw,GERP,bigwig"
 PHYLOP =  "/data/bnf/ref/annotations_dbs/VEP_conservation/hg19.100way.phyloP100way.bw,phyloP100way,bigwig"
 PHASTCONS = "/data/bnf/ref/annotations_dbs/VEP_conservation/hg19.100way.phastCons.bw,phastCons,bigwig"
-// SNPSIFT
+
 SNPSIFT = "java -jar /opt/conda/envs/exome_general/share/snpsift-4.3.1t-1/SnpSift.jar"
 CLINVAR = "/data/bnf/ref/annotations_dbs/clinvar_20190225.vcf.gz"
 SWEGEN = "/data/bnf/ref/annotations_dbs/swegen_20170823/anon-SweGen_STR_NSPHS_1000samples_freq_hg19.vcf.gz"
-// GENMOD
 SPIDEX = "/data/bnf/ref/annotations_dbs/hg19_spidex.tsv.gz"
-ADDCADD = "/data/bnf/scripts/add_missing_CADDs_1.4.sh"
+
 
 
 
@@ -41,14 +37,13 @@ println(mode)
 Channel
     .fromPath(params.csv)
     .splitCsv(header:true)
-//    .map{ row-> tuple(row.group, row.id, file(row.read1), file(row.read2)) }
     .set { fastq }
 
 Channel
     .fromPath(params.csv)
     .splitCsv(header:true)
     .map{ row-> tuple(row.group, row.id, row.sex, row.mother, row.father, row.phenotype) }
-    .set { ped }
+    .into { ped; all_ids }
 
 
 
@@ -400,8 +395,8 @@ process modify_vcf {
 } 
 
 
-Adding loqusdb allele frequency to info-field: 
-ssh needs to work from anywhere, filesystems mounted on cmdscout
+// Adding loqusdb allele frequency to info-field: 
+// ssh needs to work from anywhere, filesystems mounted on cmdscout
 process loqdb {
     //container = 'container_mongodb.sif'
     input:
@@ -469,6 +464,7 @@ process vcf_completion {
 vcf_done.into {
     vcf_done1
     vcf_done2
+    vcf_done3
 }
 
 // Running PEDDY: 
@@ -486,7 +482,27 @@ process peddy {
     python -m peddy -p ${task.cpus} $vcf $ped --prefix $group
     """
 }
-// # Running gSNP:
+
+
+// Running gSNP:
+process gnsp {
+    container = 'container_mongodb.sif'
+    publishDir "${OUTDIR}/tmp/exome/gSNP", mode: 'copy' , overwrite: 'true'
+    input:
+    set group, file(vcf), file(idx) from vcf_done3
+    set group, id, sex, mother, father, phenotype from all_ids.groupTuple()
+    output:
+    set file("${group}_gSNP.tsv"), file("${group}_gSNP.png")
+    when:
+    mode == "family"
+    script:
+    ids = id.join(' ')
+    """
+    source activate exome_general
+    perl /opt/bin/gSNP.pl $vcf ${group}_gSNP $ids
+
+    """
+}
 
 // # Uploading case to scout:
 // process scout {
