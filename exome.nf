@@ -2,7 +2,7 @@
 
 params.fasta = "/data/bnf/ref/b37/human_g1k_v37_decoy.fasta"
 params.bed = "/data/bnf/ref/agilent_clinical_research_exome_v2/S30409818_Regions.nochr.bed"
-
+capture_kit = "Agilent_SureSelectCRE.V2"
 OUTDIR = file(params.outdir)
 
 // might move these to config
@@ -42,8 +42,8 @@ Channel
 Channel
     .fromPath(params.csv)
     .splitCsv(header:true)
-    .map{ row-> tuple(row.group, row.id, row.sex, row.mother, row.father, row.phenotype) }
-    .into { ped; all_ids }
+    .map{ row-> tuple(row.group, row.id, row.sex, row.mother, row.father, row.phenotype, row.diagnosis) }
+    .into { ped; all_ids; yml_diag }
 
 
 
@@ -95,6 +95,7 @@ bam_markdup.into {
     bam_marked3
     bam_marked4
     bam_marked5
+    bam_marked6
 }
 
 // post alignement qc BLOCK
@@ -188,10 +189,10 @@ process DNAscope {
     output:
     set group, id, file("${id}.${group}.gvcf"), file("${id}.${group}.gvcf.idx") into gvcf
     script:
-    
+    type = mode == "family" ? "--emit_mode GVCF" : ""
     """
     sentieon driver -t ${task.cpus} -r $genome_file -i $bam \\
-    --interval $regions_bed --algo DNAscope --emit_mode GVCF ${id}.${group}.gvcf
+    --interval $regions_bed --algo DNAscope $type ${id}.${group}.gvcf
     """
 }
 
@@ -229,7 +230,7 @@ process gvcf_combine {
 // skapa en pedfil, ändra input istället för sök ersätt?
 process create_ped {
     input:
-    set group, id, sex, mother, father, phenotype from ped
+    set group, id, sex, mother, father, phenotype, diagnosis from ped
     output:
     file("${group}.ped") into ped_ch
     script:
@@ -257,9 +258,10 @@ process create_ped {
 }
 // collects each individual's ped-line and creates on ped-file
 ped_ch
-    .collectFile(storeDir: "${OUTDIR}/ped/exome")
-    .into{ ped_mad; ped_peddy; ped_inher }
+    .collectFile(sort: true, storeDir: "${OUTDIR}/ped/exome")
+    .into{ ped_mad; ped_peddy; ped_inher; ped_scout }
     
+
 
 // madeline ped om familj
 process madeline {
@@ -268,7 +270,7 @@ process madeline {
     input:
     file(ped) from ped_mad
     output:
-    set file("${ped}.madeline"), file("${ped}.madeline.xml")
+    set file("${ped}.madeline"), file("${ped}.madeline.xml") into madeline_ped
     when:
     mode == "family"
     script:
@@ -476,7 +478,7 @@ process peddy {
     file(ped) from ped_peddy
     set group, file(vcf), file(idx) from vcf_done1
     output:
-    set file("${group}.background_pca.json"),file("${group}.peddy.ped"),file("${group}.html"), file("${group}.het_check.csv"), file("${group}.sex_check.csv"), file("${group}.vs.html")
+    set file("${group}.ped_check.csv"),file("${group}.background_pca.json"),file("${group}.peddy.ped"),file("${group}.html"), file("${group}.het_check.csv"), file("${group}.sex_check.csv"), file("${group}.vs.html") into peddy_files
     """
     source activate peddy
     python -m peddy -p ${task.cpus} $vcf $ped --prefix $group
@@ -490,7 +492,7 @@ process gnsp {
     publishDir "${OUTDIR}/tmp/exome/gSNP", mode: 'copy' , overwrite: 'true'
     input:
     set group, file(vcf), file(idx) from vcf_done3
-    set group, id, sex, mother, father, phenotype from all_ids.groupTuple()
+    set group, id, sex, mother, father, phenotype, diagnosis from all_ids.groupTuple()
     output:
     set file("${group}_gSNP.tsv"), file("${group}_gSNP.png")
     when:
@@ -500,18 +502,32 @@ process gnsp {
     """
     source activate exome_general
     perl /opt/bin/gSNP.pl $vcf ${group}_gSNP $ids
-
     """
 }
 
-// # Uploading case to scout:
-// process scout {
+// Uploading case to scout:
+process create_yaml {
 
-//     input:
+    input:
+    set group, id, analysis_dir, file(bam), file(bai) from bam_marked6.groupTuple(sort: true)
+    set group, file(vcf), file(idx) from vcf_done2
+    set file(ped_check),file(json),file(peddy_ped),file(html), file(hetcheck_csv), file(sexcheck), file(vs_html) from peddy_files
+    file(ped) from ped_scout
+    set file(madeline), file(xml) from madeline_ped.ifEmpty()
+    set group, id, sex, mother, father, phenotype, diagnosis from yml_diag
+    output:
+    set group, file("${group}.yml") into yaml
+    script:
+    bams = bam.join(',')
+    madde = xml.name != '' ? "$xml" : "single"
+    """
+    /trannel/proj/cmd-pipe/nexomeflow/bin/create_yml.pl $bams $ped $group $vcf $madde $peddy_ped $ped_check $sexcheck $OUTDIR $diagnosis > ${group}.yml
+    """
 
-
-// }
+}
 // # Registering contamination data:
 
 // # Uploading variants to loqusdb:
 
+
+//email results
