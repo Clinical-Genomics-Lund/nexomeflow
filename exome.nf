@@ -488,7 +488,7 @@ process peddy {
 
 // Running gSNP:
 process gnsp {
-    container = 'container_mongodb.sif'
+    //container = 'container_mongodb.sif'
     publishDir "${OUTDIR}/tmp/exome/gSNP", mode: 'copy' , overwrite: 'true'
     input:
     set group, file(vcf), file(idx) from vcf_done3
