@@ -3,6 +3,7 @@
 .nextflow*
 work/
 *.sif
-*.png
 data/
-test_run_*
+test.dag.png*
+sample.tsv
+bin/CADD*
