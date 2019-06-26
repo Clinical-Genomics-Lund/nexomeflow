@@ -1,1 +1,1 @@
-sudo singularity build container_2019-05-14.sif Singularity
+sudo singularity build container_bwamem2.sif Singularity
