@@ -1,7 +1,8 @@
 #!/usr/bin/env nextflow
 
-params.fasta = "/data/bnf/ref/b37/human_g1k_v37_decoy.fasta"
-params.bed = "/data/bnf/ref/agilent_clinical_research_exome_v2/S30409818_Regions.nochr.bed"
+REFDIR = "/fs1/resources/ref/hg19"
+params.fasta = "${REFDIR}/fasta/bwa-mem2/human_g1k_v37_decoy.fasta"
+params.bed = "${REFDIR}/bed/agilent_clinical_research_exome_v2/S30409818_Regions.nochr.bed"
 capture_kit = "Agilent_SureSelectCRE.V2"
 OUTDIR = file(params.outdir)
 
@@ -11,21 +12,22 @@ regions_bed = file(params.bed)
 rank_model_s = "/rank_models/rank_model_cmd_v3_single_withoutmodels.ini"
 rank_model = "/rank_models/rank_model_cmd_v3.ini"
 
-REGCDM = "/data/bnf/scripts/register_sample.pl"
-// VEP 
-CADD = "/data/bnf/sw/.vep/PluginData/whole_genome_SNVs_1.4.tsv.gz"
-VEP_FASTA = "/data/bnf/sw/.vep/homo_sapiens/87_GRCh37/Homo_sapiens.GRCh37.75.dna.primary_assembly.fa"
-MAXENTSCAN = "/data/bnf/sw/ensembl-vep-95/.vep/Plugins/MaxEntScan_scripts"
-VEP_CACHE = "/data/bnf/sw/ensembl-vep-95/.vep"
-GNOMAD = "/data/bnf/ref/b37/gnomad.exomes.r2.0.1.sites.vcf___.gz,gnomADg,vcf,exact,0,AF,AF_AFR,AF_AMR,AF_ASJ,AF_EAS,AF_FIN,AF_NFE,AF_OTH"
-GERP = "/data/bnf/ref/annotations_dbs/VEP_conservation/All_hg19_RS.bw,GERP,bigwig"
-PHYLOP =  "/data/bnf/ref/annotations_dbs/VEP_conservation/hg19.100way.phyloP100way.bw,phyloP100way,bigwig"
-PHASTCONS = "/data/bnf/ref/annotations_dbs/VEP_conservation/hg19.100way.phastCons.bw,phastCons,bigwig"
+// REGCDM = "/data/bnf/scripts/register_sample.pl"
+// VEP
+
+CADD = "${REFDIR}/annotation_dbs/whole_genome_SNVs_1.4.tsv.gz"
+VEP_FASTA = "${REFDIR}/vep/.vep/homo_sapiens/87_GRCh37/Homo_sapiens.GRCh37.75.dna.primary_assembly.fa"
+MAXENTSCAN = "${REFDIR}/vep/.vep/Plugins/MaxEntScan_scripts"
+VEP_CACHE = "${REFDIR}/vep/.vep"
+GNOMAD = "${REFDIR}/annotation_dbs/gnomad.exomes.r2.0.1.sites.vcf___.gz,gnomADg,vcf,exact,0,AF,AF_AFR,AF_AMR,AF_ASJ,AF_EAS,AF_FIN,AF_NFE,AF_OTH"
+GERP = "${REFDIR}/annotations_dbs/All_hg19_RS.bw,GERP,bigwig"
+PHYLOP =  "${REFDIR}/annotations_dbs/hg19.100way.phyloP100way.bw,phyloP100way,bigwig"
+PHASTCONS = "${REFDIR}/annotations_dbs/hg19.100way.phastCons.bw,phastCons,bigwig"
 
 SNPSIFT = "java -jar /opt/conda/envs/exome_general/share/snpsift-4.3.1t-1/SnpSift.jar"
-CLINVAR = "/data/bnf/ref/annotations_dbs/clinvar_20190225.vcf.gz"
-SWEGEN = "/data/bnf/ref/annotations_dbs/swegen_20170823/anon-SweGen_STR_NSPHS_1000samples_freq_hg19.vcf.gz"
-SPIDEX = "/data/bnf/ref/annotations_dbs/hg19_spidex.tsv.gz"
+CLINVAR = "${REFDIR}/annotations_dbs/clinvar_20190225.vcf.gz"
+SWEGEN = "${REFDIR}/annotations_dbs/anon-SweGen_STR_NSPHS_1000samples_freq_hg19.vcf.gz"
+SPIDEX = "${REFDIR}/annotations_dbs/hg19_spidex.tsv.gz"
 
 
 
@@ -50,11 +52,13 @@ Channel
 // alignment using sentieon-bwa
 process bwa_align {
     cpus 12
+    time '10h'
     input: 
     set clarity_sample_id, id, assay, sex, diagnosis, phenotype, group, father, mother, clarity_pool_id, platform, read1, read2, analysis_dir from fastq
     output:
     set group, id, analysis_dir, file("${id}_bwa.sort.bam"), file("${id}_bwa.sort.bam.bai") into bwa_bam
     script:
+    if ( params.sention_bwa)
 	"""
     sentieon bwa mem -M \\
     -R '@RG\\tID:${id}\\tSM:${id}\\tPL:illumina' \\
@@ -67,6 +71,14 @@ process bwa_align {
     -t ${task.cpus} \\
     --sam2bam -i -
     """
+    else {
+        println ("bwa-mem2")
+        """
+        bwa-mem2 mem -R '@RG\\tID:${id}_${id}\\tSM:${id}\\tPL:illumina' -M -t ${task.cpus} \\
+        $genome_file ${read1} ${read2} | samtools view -Sb - | samtools sort -o ${id}_bwa.sort.bam -
+        samtools index ${id}_bwa.sort.bam
+        """
+    }
 }
 
 // mark duplicates
