@@ -1,7 +1,7 @@
 #!/usr/bin/env nextflow
 
 REFDIR = "/fs1/resources/ref/hg19"
-params.fasta = "${REFDIR}/fasta/bwa-mem2/human_g1k_v37_decoy.fasta"
+params.fasta = "${REFDIR}/fasta/human_g1k_v37_decoy.fasta"
 params.bed = "${REFDIR}/bed/agilent_clinical_research_exome_v2/S30409818_Regions.nochr.bed"
 capture_kit = "Agilent_SureSelectCRE.V2"
 OUTDIR = file(params.outdir)
@@ -58,7 +58,7 @@ process bwa_align {
     output:
     set group, id, analysis_dir, file("${id}_bwa.sort.bam"), file("${id}_bwa.sort.bam.bai") into bwa_bam
     script:
-    if ( params.sention_bwa)
+    if ( params.sentieon_bwa)
 	"""
     sentieon bwa mem -M \\
     -R '@RG\\tID:${id}\\tSM:${id}\\tPL:illumina' \\
@@ -268,7 +268,7 @@ process create_ped {
     echo "${group}\t${id}\t${father}\t${mother}\t${sex}\t${phenotype}" > ${group}.ped
     """
 }
-// collects each individual's ped-line and creates on ped-file
+// collects each individual's ped-line and creates one ped-file
 ped_ch
     .collectFile(sort: true, storeDir: "${OUTDIR}/ped/exome")
     .into{ ped_mad; ped_peddy; ped_inher; ped_scout }
@@ -306,7 +306,7 @@ process split_normalize {
     """
     vcfbreakmulti ${vcf} > ${group}.multibreak.vcf
     bcftools norm -m-both -c w -O v -f $genome_file -o ${group}.norm.vcf ${group}.multibreak.vcf
-    /data/bnf/scripts/exome_DPAF_filter.pl ${group}.norm.vcf > ${group}.norm.DPAF.vcf
+    exome_DPAF_filter.pl ${group}.norm.vcf > ${group}.norm.DPAF.vcf
     """
 }
 

@@ -19,7 +19,7 @@ dependencies:
     - bioconda::vt=2015.11.10
     - bioconda::pybigwig
     - perl-app-cpanminus
-    - bioconda::gatk4=4.1.2.0
+    - r-base
     #- mongodb
     - perl-gd
 
