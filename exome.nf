@@ -16,18 +16,18 @@ rank_model = "/rank_models/rank_model_cmd_v3.ini"
 // VEP
 
 CADD = "${REFDIR}/annotation_dbs/whole_genome_SNVs_1.4.tsv.gz"
-VEP_FASTA = "${REFDIR}/vep/.vep/homo_sapiens/87_GRCh37/Homo_sapiens.GRCh37.75.dna.primary_assembly.fa"
+VEP_FASTA = "${REFDIR}/vep/.vep/87_GRCh37/Homo_sapiens.GRCh37.75.dna.primary_assembly.fa"
 MAXENTSCAN = "${REFDIR}/vep/.vep/Plugins/MaxEntScan_scripts"
 VEP_CACHE = "${REFDIR}/vep/.vep"
 GNOMAD = "${REFDIR}/annotation_dbs/gnomad.exomes.r2.0.1.sites.vcf___.gz,gnomADg,vcf,exact,0,AF,AF_AFR,AF_AMR,AF_ASJ,AF_EAS,AF_FIN,AF_NFE,AF_OTH"
-GERP = "${REFDIR}/annotations_dbs/All_hg19_RS.bw,GERP,bigwig"
-PHYLOP =  "${REFDIR}/annotations_dbs/hg19.100way.phyloP100way.bw,phyloP100way,bigwig"
-PHASTCONS = "${REFDIR}/annotations_dbs/hg19.100way.phastCons.bw,phastCons,bigwig"
+GERP = "${REFDIR}/annotation_dbs/All_hg19_RS.bw,GERP,bigwig"
+PHYLOP =  "${REFDIR}/annotation_dbs/hg19.100way.phyloP100way.bw,phyloP100way,bigwig"
+PHASTCONS = "${REFDIR}/annotation_dbs/hg19.100way.phastCons.bw,phastCons,bigwig"
 
 SNPSIFT = "java -jar /opt/conda/envs/exome_general/share/snpsift-4.3.1t-1/SnpSift.jar"
-CLINVAR = "${REFDIR}/annotations_dbs/clinvar_20190225.vcf.gz"
-SWEGEN = "${REFDIR}/annotations_dbs/anon-SweGen_STR_NSPHS_1000samples_freq_hg19.vcf.gz"
-SPIDEX = "${REFDIR}/annotations_dbs/hg19_spidex.tsv.gz"
+CLINVAR = "${REFDIR}/annotation_dbs/clinvar_20190225.vcf.gz"
+SWEGEN = "${REFDIR}/annotation_dbs/anon-SweGen_STR_NSPHS_1000samples_freq_hg19.vcf.gz"
+SPIDEX = "${REFDIR}/annotation_dbs/hg19_spidex.tsv.gz"
 
 
 
@@ -313,7 +313,7 @@ process split_normalize {
 // Annotating variants with VEP: 
 
 process annotate_vep {
-    container = 'container_VEP.sif'
+    container = '/fs1/resources/containers/container_VEP.sif'
     cpus 6
     input:
     set group, file(vcf) from split
@@ -412,13 +412,12 @@ process modify_vcf {
 // Adding loqusdb allele frequency to info-field: 
 // ssh needs to work from anywhere, filesystems mounted on cmdscout
 process loqdb {
-    //container = 'container_mongodb.sif'
     input:
     set group, file(vcf) from mod_vcf
     output:
     set group, file("${group}.loqdb.vcf") into loqdb_vcf
     """
-    /opt/bin/loqus_db_filter.pl $vcf > ${group}.loqdb.vcf
+    /opt/bin/loqus_db_filter.pl $vcf PORT_CMDSCOUT2_MONGODB > ${group}.loqdb.vcf
     """
     // ssh cmdscout1.lund.skane.se 
 }

@@ -7,7 +7,7 @@ use MongoDB;
 # Annotates vcf with loqusdb frequency for each variant 
 # in info-field as loqusdb_freq=
 
-open(VCF, "zcat $ARGV[0]|");
+open(VCF, $ARGV[0]);
 my @SAMPLE;
 # Save all variants in vcf into array
 while ( <VCF>   ) {
@@ -55,7 +55,7 @@ while( my $var = $variants->next ) {
     $obs_per_var{$var->{'_id'}} = $var->{'observations'};
 }
 
-open(VCF, "zcat $ARGV[0]|");
+open(VCF, $ARGV[0]);
 my $c = 0;
 while ( <VCF>   ) {
     if (/^#/) {
