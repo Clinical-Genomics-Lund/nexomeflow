@@ -7,7 +7,7 @@ use MongoDB;
 # Annotates vcf with loqusdb frequency for each variant 
 # in info-field as loqusdb_freq=
 
-open(VCF, $ARGV[0]);
+open(VCF, "zcat $ARGV[0]|");
 my @SAMPLE;
 # Save all variants in vcf into array
 while ( <VCF>   ) {
@@ -23,9 +23,23 @@ while ( <VCF>   ) {
 
 }
 close VCF;
+
 # Connect to mongodb
-my $client = MongoDB->connect('mongodb://cmdscout2.lund.skane.se/loqusdb');
-#my $client = MongoDB->connect();
+# Set default path
+my $host = "mongodb://cmdscout2.lund.skane.se/loqusdb";
+
+# If on hopper, reverse tunnel needs to bu used. Ports are gotten from an env var, given by second argument
+# Do not use this feature anywhere else than on Hopper!
+if( $ARGV[1] ) {
+    if( $ENV{$ARGV[1]} ) {
+	my $port = $ENV{$ARGV[1]};
+	$host = "mongodb://localhost:$port/loqusdb";
+    }
+    else {
+	die "No port envvar set for $ARGV[1]";
+    }
+}
+my $client = MongoDB->connect($host);
 
 my $CASES = $client->ns("loqusdb.case");
 my $VARS = $client->ns("loqusdb.variant");
@@ -41,7 +55,7 @@ while( my $var = $variants->next ) {
     $obs_per_var{$var->{'_id'}} = $var->{'observations'};
 }
 
-open(VCF, $ARGV[0]);
+open(VCF, "zcat $ARGV[0]|");
 my $c = 0;
 while ( <VCF>   ) {
     if (/^#/) {
