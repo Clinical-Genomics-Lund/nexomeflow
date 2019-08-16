@@ -29,6 +29,7 @@ From:nfcore/base
 	apt -y install libz-dev build-essential gettext cmake libxml2-dev libcurl4-openssl-dev libssl-dev make
 	/opt/conda/envs/exome_general/bin/cpanm Path::Tiny --force
 	/opt/conda/envs/exome_general/bin/cpanm MongoDB::Collection
+	/opt/conda/envs/exome_general/bin/cpanm JSON
 	git clone https://github.com/piratical/Madeline_2.0_PDE.git
 	cd Madeline_2.0_PDE
 	./configure --with-include-gettext
