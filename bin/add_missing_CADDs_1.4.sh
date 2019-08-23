@@ -33,7 +33,7 @@ perl -naF'\t' -e ' next if(/^#/); if( (length($F[3]) > 1) || (length($F[4]) > 1)
 >&2 echo "Done!"
 # run score.sh (cadd scores without anno)
 >&2 echo "start score.sh on all ins/dels from ${gm_vcf}.indels..."
-/data/bnf/sw/cadd/1.4/CADD-scripts/CADD_2.sh -g GRCh37 -o ${tmpdir}/${gm_vcf}.indel_CADDs.gz ${tmpdir}/${gm_vcf}.indels.vcf.gz
+CADD_2.sh -g GRCh37 -o ${tmpdir}/${gm_vcf}.indel_CADDs.gz ${tmpdir}/${gm_vcf}.indels.vcf.gz
 >&2 echo "Done!"
 # add CADD-scores to original file (*.genmod)
 gunzip -f -k ${tmpdir}/${gm_vcf}.indel_CADDs.gz
