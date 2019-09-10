@@ -16,7 +16,6 @@ From:nfcore/base
 %files
 	exome_conda.yml /
 	exome_lower_python.yml /
-	cadd_environment.yml /
 	bin/ /opt
 	#/data/bnf/sw/sentieon/sentieon-genomics-201808.05 /opt installing through Conda
 	rank_models/ /
@@ -24,7 +23,6 @@ From:nfcore/base
 	rm -rf /var/lib/apt/lists/*
 	apt -y clean
 	apt -y update
-	/opt/conda/bin/conda env create -f /cadd_environment.yml
 	/opt/conda/bin/conda env create -f /exome_conda.yml
 	apt -y install libz-dev build-essential gettext cmake libxml2-dev libcurl4-openssl-dev libssl-dev make
 	/opt/conda/envs/exome_general/bin/cpanm Path::Tiny --force
