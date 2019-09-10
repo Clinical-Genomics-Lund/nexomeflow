@@ -1,1 +1,1 @@
-sudo singularity build container_bwamem2.sif Singularity
+sudo -E singularity build container_`date +%Y-%m-%d`.sif Singularity
