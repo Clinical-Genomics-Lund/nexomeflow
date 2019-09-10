@@ -14,11 +14,11 @@ From:nfcore/base
 	export PERL5LIB=$PERL5LIB:/opt/bin/
 
 %files
-    exome_conda.yml /
+	exome_conda.yml /
 	exome_lower_python.yml /
 	cadd_environment.yml /
-    bin/ /opt
-	/data/bnf/sw/sentieon/sentieon-genomics-201808.05 /opt
+	bin/ /opt
+	#/data/bnf/sw/sentieon/sentieon-genomics-201808.05 /opt installing through Conda
 	rank_models/ /
 %post
 	rm -rf /var/lib/apt/lists/*

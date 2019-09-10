@@ -20,7 +20,8 @@ dependencies:
     - bioconda::pybigwig
     - perl-app-cpanminus
     - r-base
-    #- mongodb
     - perl-gd
+    - bioconda::sentieon=201808.07
+    - bioconda::chanjo=3.1.1-0
 
     
