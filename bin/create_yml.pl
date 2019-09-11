@@ -88,8 +88,17 @@ print "human_genome_build: $genome\n";
 
 sub get_genelist {
     my $institute = shift;
-    my $client = MongoDB->connect('mongodb://cmdscout2.lund.skane.se/scout');
-
+    my $host = 'mongodb://cmdscout2.lund.skane.se/scout';
+    if( $ARGV[10] ) {
+        if( $ENV{$ARGV[10]} ) {
+	        my $port = $ENV{$ARGV[1]};
+	        $host = "mongodb://localhost:$port/loqusdb";
+        }
+        else {
+	        die "No port envvar set for $ARGV[1]";
+        }
+    }
+    my $client = MongoDB->connect($host);
     my $PANELS = $client->ns("scout.gene_panel");
     my $panels = $PANELS->find( {'institute'=>$institute} );
 
