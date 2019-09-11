@@ -16,9 +16,9 @@ From:nfcore/base
 %files
 	exome_conda.yml /
 	exome_lower_python.yml /
-	bin/ /opt
+	../bin/ /opt
 	#/data/bnf/sw/sentieon/sentieon-genomics-201808.05 /opt installing through Conda
-	rank_models/ /
+	../rank_models/ /
 %post
 	rm -rf /var/lib/apt/lists/*
 	apt -y clean
