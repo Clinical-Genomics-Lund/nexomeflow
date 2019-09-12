@@ -79,6 +79,7 @@ while( <VEP>) {
         print "##INFO=<ID=dbNSFP_phastCons100way_vertebrate,Number=1,Type=Float,Description=\"phastcons score\">\n";
         print "##INFO=<ID=CLNSIG_MOD,Number=.,Type=String,Description=\"Modified Variant Clinical Significance, for genmod score _0_ - Uncertain significance, _1_ - not provided, _2_ - Benign, _3_ - Likely benign, _4_ - Likely pathogenic, _5_ - Pathogenic, _6_ - drug response, _7_ - histocompatibility, _255_ - other\">\n";
         print "##INFO=<ID=most_severe_consequence,Number=.,Type=String,Description=\"Most severe genomic consequence.\">\n";
+        print "##INFO=<ID=CADD,Number=.,Type=String,Description=\"CADD phred score\">\n";
 	    print;
         $_ =~ s/^#//;
 	    @head = split /\t/;
@@ -121,8 +122,12 @@ while( <VEP>) {
 
         }
         my $pP = $doobi->{INFO}->{CSQ}->[0]->{phyloP100way};
-         if ($pP) {
+        if ($pP) {
             push @add_info_field,"dbNSFP_phyloP100way_vertebrate=$pP";
+        }
+        my $CADD = $doobi->{INFO}->{CSQ}->[0]->{CADD_PHRED};
+        if ($CADD) {
+            push @add_info_field,"CADD=$CADD";
         }
         ## CLINSIG MODIFY
         my $csM = $doobi->{INFO}->{CLNSIG};
