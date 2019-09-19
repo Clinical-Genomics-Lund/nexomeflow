@@ -24,6 +24,7 @@ while ( <PED> ) {
     push @ped, $_;
 
 }
+close PED;
 print "---\n";
 my $institute;
 if (scalar(@bams) > 1 ) {
@@ -40,10 +41,10 @@ my $count = 0;
 foreach my $sample (@ped) {
     my @pedline = split/\t/,$sample;
     print " - analysis_type: $antype\n";
-    print "  sample_id: $pedline[1]\n";
-    print "  sample_name: $pedline[1]\n";
-    print "  mother: $pedline[3]\n";
-    print "  father: $pedline[2]\n";
+    print "  sample_id: '$pedline[1]'\n";
+    print "  sample_name: '$pedline[1]'\n";
+    print "  mother: '$pedline[3]'\n";
+    print "  father: '$pedline[2]'\n";
     print "  capture_kit: $kit\n";
     if ($pedline[5] == 1) {
         print "  phenotype: unaffected\n";
@@ -61,16 +62,16 @@ foreach my $sample (@ped) {
     else { print STDERR "not a valid sex!\n" }
     my @match_bam = grep(/^$pedline[1]/, @bams);
     unless (scalar(@match_bam) == 1) { print STDERR "no matching bam"; exit; }
-    print "  bam_path: $basedir/bam/exome/@match_bam\n";
+    print "  bam_path: $basedir/bam/wgs/@match_bam\n";
     $count++;
 }
-print "vcf_snv: $basedir/vcf/exome/$vcf\n";
+print "vcf_snv: $basedir/vcf/wgs/$vcf\n"; ##obs skapa en version för exome specifikt
 if (scalar(@bams) > 1 ) {
-    print "madeline: $basedir/ped/exome/$xml\n";
+    print "madeline: $basedir/ped/wgs/$xml\n";
 }
-print "peddy_ped: $basedir/ped/exome/$peddy_ped\n";
-print "peddy_check: $basedir/ped/exome/$ped_check\n";
-print "peddy_sex: $basedir/ped/exome/$sexcheck\n";
+print "peddy_ped: $basedir/ped/wgs/$peddy_ped\n";
+print "peddy_check: $basedir/ped/wgs/$ped_check\n";
+print "peddy_sex: $basedir/ped/wgs/$sexcheck\n";
 my $gene_panels = get_genelist($institute);
 print "gene_panels: [";
 print join ",", @$gene_panels;
@@ -91,7 +92,7 @@ sub get_genelist {
     my $host = 'mongodb://cmdscout2.lund.skane.se/scout';
     if( $ARGV[10] ) {
         if( $ENV{$ARGV[10]} ) {
-	        my $port = $ENV{$ARGV[1]};
+	        my $port = $ENV{$ARGV[10]};
 	        $host = "mongodb://localhost:$port/loqusdb";
         }
         else {
